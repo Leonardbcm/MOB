@@ -17,5 +17,11 @@ OB3 = SimpleOrderBook([
     LinearOrder("Demand", 15, 0, 15)
 ])
 
-ploter = ExamplePloter([OB1, OB2, OB3])
+# Infeasible OB
+OB4 = SimpleOrderBook([
+    LinearOrder("Supply", 9, 11, 10),
+    LinearOrder("Demand", 14, 11, 15)
+])
+
+ploter = ExamplePloter([OB1, OB2, OB3, OB4])
 ploter.display()

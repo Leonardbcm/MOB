@@ -200,11 +200,11 @@ class MinDual(ComputationalSolution):
 
     def get_real_price(self):
         folder = os.path.split(self.order_book.data_folder)[0]
-        filename = "interpolated_price.csv"
+        filename = "real_prices.csv"
         results = pandas.read_csv(os.path.join(folder, filename))
         string_date = datetime.datetime.strftime(
-            self.order_book.date_time, "%Y-%m-%dT%H:%M:00.0")
-        real_ = results.loc[results.period_start_time == string_date, "price_mean"]
+            self.order_book.date_time, "%Y-%m-%dT%H:%M:00")
+        real_ = results.loc[results.period_start_time == string_date, "price"]
         return real_.values[0]
 
     def solve_all_methods(self, ret_dict=False, ks=[1, 10, 100, 1000]):
@@ -351,7 +351,7 @@ class TorchSolution(ComputationalSolution):
         
         return torch.concat([linear_dual, step_dual])
 
-    def dual_derivatives_lambda(self, l, epsilon=0.0):
+    def dual_derivatives_lambda_generic(self, l, epsilon=0.0):
         x = self.v * (l - self.p0)
         y = self.v * (l - self.p0 - self.p)        
         z = epsilon - torch.abs(self.p)
@@ -363,26 +363,14 @@ class TorchSolution(ComputationalSolution):
         dz = Sz * (1 - Sz)
         return self.v * Sy + x * (Sx - Sy) / (self.p + dz)
 
-    def dual_derivatives_lambda_protected(self, l, epsilon=0.0):
-        x = self.v * (l - self.p0)
-        y = self.v * (l - self.p0 - self.p)        
-        
-        Sx = torch.nn.Sigmoid()(self.k * x)
-        Sy = torch.nn.Sigmoid()(self.k * y)
-        
-        # Replaces nan (0/0) by 0
-        div = torch.nan_to_num((Sx - Sy) / self.p)
-        
-        return self.v * Sy + x * div    
-        
     def dual_derivative_lambda(self, l):
-        return torch.sum(self.dual_derivatives_lambda(l))
+        return self.dual_derivative_lambda_generic(l)
+        
+    def dual_derivative_lambda_generic(self, l):
+        return torch.sum(self.dual_derivatives_lambda_generic(l))
 
     def dual_derivative_lambda_separated(self, l):
-        return torch.sum(self.dual_derivatives_lambda_separated(l))
-
-    def dual_derivative_lambda_protected(self, l):
-        return torch.sum(self.dual_derivatives_lambda_protected(l))    
+        return torch.sum(self.dual_derivatives_lambda_separated(l))  
 
     def solve_all_methods(self, ret_dict=False, ks=[1, 10, 100, 1000]):
         res = []
@@ -392,13 +380,7 @@ class TorchSolution(ComputationalSolution):
             self.k=k
             result = self.solve().detach().item()
             res += [result]
-            return_dict[f"sigmoid_{k}"] = result
-
-        for k in ks:
-            self.k=k            
-            result = self.solve(protected=True).detach().item()
-            res += [result]
-            return_dict[f"protected_{k}"] = result            
+            return_dict[f"sigmoid_{k}"] = result          
 
         for k in ks:
             self.k=k            
@@ -411,7 +393,7 @@ class TorchSolution(ComputationalSolution):
 
         return res, list(return_dict.keys())
     
-    def solve(self, generic=False, protected=False, niter=0):
+    def solve(self, generic=True, niter=0):
         self.init_solver()        
         
         # Solve using a dichotomy search. If statements are replaced by heaviside
@@ -424,12 +406,10 @@ class TorchSolution(ComputationalSolution):
         found = False
         while ((not found) and (ub - lb > 2 * self.step)) or (self.steps < niter):
             m = (lb + ub) / 2
-            if (not generic) and (not protected):
+            if generic:
                 value_at_m = self.dual_derivative_lambda(m)
-            elif generic:
-                value_at_m = self.dual_derivative_lambda_generic(m)
-            elif protected:
-                value_at_m = self.dual_derivative_lambda_protected(m)
+            else:
+                value_at_m = self.dual_derivative_lambda_separated(m)
                 
             found = torch.abs(value_at_m) < self.epsilon
             HDM = torch.sigmoid(self.k * value_at_m)
