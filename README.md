@@ -20,7 +20,19 @@ Set up the `MOB` environment variable for reading/storing data:
 
 ## Data
 
-Data is available at :
+Data is available [here](https://www.dropbox.com/sh/z5m1udr3i7cl8sx/AAA2H5ErEqWl83nTIQ9Fzsdxa?dl=0).
+This contains:
+
+- 1 month of Orders Books history in `HOURLY`
+- 6 year-length dataset of exogenous features in `data/datasets/Lyon`
+- Experimental results 
 
 ## Scripts
+
+The `script` folder contains the following:
+
+- `example.py` to plot several Order Books (aggregated curves).
+- `compare_methods.py` will solve the Dual Problem for several implemented solutions. Solutions with parameters (e.g. : `k` for sigmoid approximation) will test several values.
+
+
 

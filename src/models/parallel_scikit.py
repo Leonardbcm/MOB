@@ -1,29 +1,22 @@
-import time, pandas, copy
-from sklearn.model_selection import ParameterSampler
+import os, time,pandas,copy,joblib, sklearn, warnings, shap, numpy as np, sys, torch
 from joblib import Parallel, delayed
-import joblib
-import sklearn, warnings
-import shap
-from sklearn.model_selection import KFold
-import numpy as np, sys
-import torch
 from warnings import simplefilter
+
+from sklearn.model_selection import ParameterSampler, KFold
 from sklearn.exceptions import ConvergenceWarning
 from sklearn.metrics import mean_absolute_error
-from work.analysis.evaluate import ACC
+
+from src.analysis.evaluate import ACC
 
 ## Seed settings
-import tensorflow as tf
-import os
 os.environ['PYTHONHASHSEED'] = '90125'
-import numpy
+import numpy, random
 from numpy.random import seed
 import random
 
 def set_all_seeds(SEED=90125, env=True):
     seed(SEED)
     random.seed(SEED)
-    tf.random.set_seed(SEED)
     torch.manual_seed(SEED)
     if env: os.environ['HYPEROPT_FMIN_SEED'] = f"{SEED}"      
 

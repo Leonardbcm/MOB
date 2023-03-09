@@ -8,16 +8,29 @@ class StoreOBhat(Callback):
         self.dtype = dtype
         
         self.OBhats = [[]]
+        self.yhats = [[]]        
         self.current_epoch = -1        
 
     def on_train_epoch_start(self, trainer, pl_module):
         self.current_epoch += 1 
-        self.OBhats.append([])        
+        self.OBhats.append([])
+        self.yhats.append([])                
 
     def on_train_batch_end(self, trainer, pl_module, outputs, batch, batch_idx):
         x, y = batch
         OBhat = pl_module.forward(x, predict_order_books=True).detach().numpy()
-        self.OBhats[self.current_epoch].append(OBhat)        
+        self.OBhats[self.current_epoch].append(OBhat)
+
+        yhat = pl_module.forward(x).detach().numpy()
+        self.yhats[self.current_epoch].append(yhat)
+        
+        mean_volumes = np.abs(OBhat[:, :, 0]).mean()
+        mean_p0s = np.abs(OBhat[:, :, 1]).mean()
+        mean_prices = np.abs(OBhat[:, :, 2]).mean()
+
+        self.log("mean_volumes", mean_volumes, logger=True)
+        self.log("mean_p0s", mean_volumes, logger=True)
+        self.log("mean_prices", mean_volumes, logger=True)                  
 
 class StoreLosses(Callback):
     def __init__(self):

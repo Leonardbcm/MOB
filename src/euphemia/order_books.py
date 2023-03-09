@@ -100,30 +100,43 @@ class SimpleOrderBook(OrderBook):
     
     def price_range(self, pmin, pmax, step=0.01):
         return np.arange(pmin, pmax + step/2, step)
-    
-    def curves(self, pmin, pmax, step=0.01, fit_to_data=False):
-        if fit_to_data:
-            pmin_demand = self.pmin_demand
-            pmax_demand = self.pmax_demand
-            pmin_supply = self.pmin_supply
-            pmax_supply = self.pmax_supply
-           
-        price_range_supply = self.price_range(pmin_supply, pmax_supply, step=step)
+
+    def _curves_fit(self, step=0.01):
+        pmin_supply = self.pmin_supply
+        pmax_supply = self.pmax_supply            
+        price_range_supply=self.price_range(pmin_supply, pmax_supply, step=step)
         supply = np.zeros(len(price_range_supply))
         for os in self.supply:
             supply += os.differential(pmin_supply, pmax_supply, step)
 
+        pmin_demand = self.pmin_demand
+        pmax_demand = self.pmax_demand            
         price_range_demand = self.price_range(pmin_demand, pmax_demand, step=step)
         demand = np.zeros(len(price_range_demand))
         for od in self.demand:
             demand += od.differential(pmin_demand, pmax_demand, step)
 
-        if not fit_to_data:
-            return np.cumsum(supply), np.cumsum(demand)
-        else:
-            return ((np.cumsum(supply), price_range_supply),
-                    (np.cumsum(demand), price_range_demand))
+        return ((np.cumsum(supply), price_range_supply),
+                (np.cumsum(demand), price_range_demand))        
 
+    def _curves_not_fit(self, pmin, pmax, step=0.01):
+        price_range = self.price_range(pmin, pmax, step=step)
+        supply = np.zeros(len(price_range))
+        for os in self.supply:
+            supply += os.differential(pmin, pmax, step)
+        
+        demand = np.zeros(len(price_range))
+        for od in self.demand:
+            demand += od.differential(pmin, pmax, step)
+
+        return np.cumsum(supply), np.cumsum(demand)
+    
+    def curves(self, pmin, pmax, step=0.01, fit_to_data=False):
+        if fit_to_data:
+            return self._curves_fit(step=step)
+        else:
+            return self._curves_not_fit(pmin, pmax, step=step)
+        
     def divide_order_book(self, spot):
         x = self.signs * self.volumes * (spot - self.p0s)
         y = self.signs * self.volumes * (spot - self.prices - self.p0s)

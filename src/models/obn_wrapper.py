@@ -1,9 +1,9 @@
 from sklearn.pipeline import make_pipeline
 from sklearn.compose import TransformedTargetRegressor
 
-from work.models.Splitter import MySplitter
-from work.models.model_wrapper import *
-from work.models.OrderBookNetworks.order_book_networks import OrderBookNetwork
+from src.models.spliter import MySplitter
+from src.models.model_wrapper import *
+from src.models.obn.obn import OrderBookNetwork
 
 class OBNWrapper(ModelWrapper):
     def __init__(self, prefix, dataset_name, spliter=None,

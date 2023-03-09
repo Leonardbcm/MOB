@@ -40,7 +40,7 @@ df.period_start_time = [datetime.datetime.strptime(d, "%Y-%m-%dT%H:00:00")
                         for d in df.period_start_time]
 df.period_start_date = [d.date() for d in df.period_start_time]
 df.set_index("period_start_time", inplace=True, drop=True)
-df = df.head(10)
+#df = df.head(10)
 
 ################## LOAD from real data AND compare solutions for all days
 datetimes = df.index

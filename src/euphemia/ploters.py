@@ -400,7 +400,8 @@ class SimplePloter(Ploter):
         Ploter.__init__(self, order_book, solver, results)
     
     def display(self, ax_=None, schema=False, colors=None, labels=None,
-                linewidth=2, label_fontsize=20, fontsize=30, **kwargs):
+                linewidth=2, label_fontsize=20, fontsize=30,
+                fit_to_data=True, **kwargs):
         if ax_ is None:
             fig, ax = plt.subplots(1)
         else:
@@ -414,7 +415,19 @@ class SimplePloter(Ploter):
         maxv = self.order_book.vsum
         xpad = 10 * (maxv - minv) / 100
 
-        supply, demand = self.order_book.curves(pmin, pmax, step, fit_to_data=True)
+        supply, demand = self.order_book.curves(
+            pmin, pmax, step, fit_to_data=fit_to_data)        
+        if not fit_to_data:
+            prange = self.order_book.price_range(pmin, pmax, step)
+            prange_supply = prange
+            prange_demand = prange
+        else:
+            prange_supply = supply[1]
+            prange_demand = demand[1]
+
+            supply = supply[0]
+            demand = demand[0] 
+            
         delta = 15 * (pmax - pmin) / 100
         pmin -= delta
         pmax += delta
@@ -432,8 +445,9 @@ class SimplePloter(Ploter):
             ls = labels
             ld = None
             
-        ax.plot(supply[0], supply[1], c=cs, label=ls)
-        ax.plot(demand[0], demand[1], c=cd, label=ld)
+        ax.plot(supply, prange_supply, c=cs, label=ls)
+        ax.plot(demand, prange_demand, c=cd, label=ld)
+        
         if labels is None:
             ax.legend()
             ax.set_ylim([pmin, pmax])
@@ -556,43 +570,56 @@ class SimplePloter(Ploter):
 class MultiplePlotter(object):
     def __init__(self, regr, X):
         self.regr = regr
-        self.X = X
+        Xt, Xv = regr.steps[1][1].spliter(X)
+        self.X = Xt
         
         # 0) Get the callback
         self.cb = regr.steps[1][1].callbacks[1]
         self.n_epochs = len(self.cb.OBhats) - 1
-        self.n = X.shape[0]
+        self.n = self.X.shape[0]
         self.OBs = self.cb.OBhats[0][0].shape[1]
         
         # 1) reshape to n_epochs * n_batchs * n_per_batch * OBs * 3
         self.OBhat = np.zeros((self.n_epochs, self.n, 24, self.OBs, 3))
-        for i, ep in enumerate(self.cb.OBhats):
+        self.yhat = np.zeros((self.n_epochs, self.n, 24))        
+        for i in range(self.n_epochs):
+            ep = self.cb.OBhats[i]
             current = 0
             for j, batch in enumerate(ep):
+                # Store OB
                 batch_reshaped = batch.reshape(-1, 24, self.OBs, 3)
                 bs = batch_reshaped.shape[0]
                 self.OBhat[i, current:current+bs] = batch_reshaped
+
+                # Store forecast
+                yhat = self.cb.yhats[i][j]
+                self.yhat[i, current:current+bs] = yhat
+                
                 current += bs
            
     def display(self, d, h, ax_=None, linewidth=2, label_fontsize=20, fontsize=30,
-                colormap='copper_r', n_epochs=-1, **kwargs):
+                colormap='copper_r', epochs=-1, **kwargs):
         if ax_ is None:
-            fig, ax = plt.subplots(1)
+            fig, (ax, axp) = plt.subplots(2)
         else:
             ax = ax_
 
         cmap = plt.get_cmap(colormap)
-        if n_epochs==-1:
-            n_epochs = self.n_epochs
+        if epochs==-1:
+            epochs = range(self.n_epochs)
             
-        for e in range(n_epochs):
+        for i, e in enumerate(epochs):
             OB = TorchOrderBook(self.OBhat[e, d, h])
             ploter = get_ploter(OB)
 
-            color_index = (e + 1) / (n_epochs + 1)
-            ploter.display(ax_=ax, colors=cmap(color_index), labels=f"Epoch {e}")
-
+            color_index = (i + 1) / (len(epochs) + 1)
+            ploter.display(ax_=ax, fit_to_data=False,
+                           colors=cmap(color_index), labels=f"Epoch {e}")
         ax.legend()
+        axp.plot(epochs, self.yhat[epochs, d, h], marker=".", markersize=10)
+        axp.set_ylabel("Price forecast")
+        axp.set_xlabel("Epochs")
+        axp.grid("on")
         
         if ax_ is None:
             plt.show()

@@ -1,11 +1,9 @@
-import os, pandas, copy, ast
-from tensorflow.keras import initializers
-from tensorflow.keras import regularizers
-import work.models.Splitter as SPL
-import numpy as np
+import os, pandas, copy, ast, numpy as np
 from ast import literal_eval as make_tuple
 
-base_folder = os.environ['VOLTAIRE']
+import src.models.spliter as SPL
+
+base_folder = os.environ['MOB']
 
 def flatten_dict(d):
     res = []
