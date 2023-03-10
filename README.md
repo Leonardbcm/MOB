@@ -33,6 +33,8 @@ The `script` folder contains the following:
 
 - `example.py` to plot several Order Books (aggregated curves).
 - `compare_methods.py` will solve the Dual Problem for several implemented solutions. Solutions with parameters (e.g. : `k` for sigmoid approximation) will test several values.
+- `obn.py` fits an Order Book Network and inspect the forecasted order books along time.
+- `order_book_analysis.py` extract information from the order book dataset : price distribution, acceptance distribution.
 
 
 

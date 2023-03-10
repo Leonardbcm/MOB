@@ -14,7 +14,7 @@ def it_results(fontsize=20):
                 for col in k_results.columns if "generic_sigmoid" in col]
     k_maes = [k_results.loc[:, f"dual_derivative_generic_sigmoid_{k}"].values[0]
               for k in k_values]
-
+    
     barwidth = 0.8    
     axk.bar(np.log10(k_values), k_maes, width=barwidth,
             edgecolor="k", color="b", alpha=0.6)

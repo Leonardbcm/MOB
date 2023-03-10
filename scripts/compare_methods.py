@@ -7,6 +7,7 @@ from src.euphemia.order_books import LoadedOrderBook, TorchOrderBook
 from src.euphemia.solvers import MinDual, TorchSolution
 from src.euphemia.ploters import get_ploter
 from src.analysis.compare_methods_utils import it_results
+from src.analysis.utils import load_real_prices
 
 from torch.utils.data import DataLoader
 from src.models.obn.ob_datasets import OrderBookDataset
@@ -32,16 +33,8 @@ torch_book = TorchOrderBook(OB.orders)
 torch_solver = TorchSolution(torch_book)
 pstar = torch_solver.solve()
 
-################## Load real prices + datetimes
-filename = "real_prices.csv"
-path = os.path.join(base_folder, filename)
-df = pandas.read_csv(path)
-df.period_start_time = [datetime.datetime.strptime(d, "%Y-%m-%dT%H:00:00")
-                        for d in df.period_start_time]
-df.period_start_date = [d.date() for d in df.period_start_time]
-df.set_index("period_start_time", inplace=True, drop=True)
-#df = df.head(10)
-
+# call df = load_real_prices(-1) to get all dataset
+df = load_real_prices(10)
 ################## LOAD from real data AND compare solutions for all days
 datetimes = df.index
 ks = [1, 10, 100, 1000]
