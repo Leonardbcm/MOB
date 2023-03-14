@@ -149,6 +149,13 @@ class StepOrder(SimpleOrder):
     def is_rejected(self, l):
         return not self.is_full(l)
 
+    def accepted_volume(self, l):
+        if self.is_full(l):
+            return self.sign*self.V
+        
+        if self.is_rejected(l):
+            return 0    
+
     def differential(self, pmin, pmax, step=0.01):
         """
         Volume variation against prices. Used for plotting the aggregated curves.
@@ -304,6 +311,16 @@ class LinearOrder(SimpleOrder):
         else:
             print(self, l)
 
+    def accepted_volume(self, l):        
+        if self.is_partial(l):            
+            return (l - self.p0)*self.V*self.sign/self.P
+        
+        if self.is_full(l):
+            return self.sign*self.V
+        
+        if self.is_rejected(l):
+            return 0
+            
     def dual_derivative_piecewise(self, l):
         """
         Computes the dual derivative for a Linear Order using if statements

@@ -41,8 +41,6 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         self.criterion = model_["criterion"]
         self.N_OUTPUT = model_["N_OUTPUT"]
         self.spliter = model_["spliter"]
-        self.scale = model_["scale"]
-        self.clip = model_["clip"]
         self.store_OBhat = model_["store_OBhat"]
         
         self.store_losses = model_["store_losses"]
@@ -50,7 +48,9 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         self.logdir = os.path.join(os.environ["VOLTAIRE"], "logs")        
         
         # Used to transform the upper and lower bound!
-        self.transformer = model_["transformer"]        
+        self.transformer = model_["transformer"]
+        self.OB_weight_initializers = model_["OB_weight_initializers"]    
+        self.scale = model_["scale"]
 
     def set_params(self, **parameters):
         for parameter, value in parameters.items():            
@@ -71,8 +71,8 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         if self.store_losses:
             self.callbacks += [StoreLosses()]
         if self.store_OBhat:
-            self.callbacks += [StoreOBhat(self)]            
-            
+            #self.callbacks += [StoreOBhat(self.store_OBhat)]
+            self.callbacks += [ValOBhat(self.store_OBhat)]
         self.early_stopping_callbacks()
     
     ###### METHODS FOR SKLEARN AND VOLTAIRE
@@ -92,6 +92,17 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
             default_root_dir=self.logdir, enable_progress_bar=True)
 
         # Train   
+        self.trainer.fit(self.model, train_dataloaders=train_loader,
+                         val_dataloaders=val_loader)
+
+    def refit(self, X, y, epochs=1):
+        train_loader, val_loader = self.prepare_for_retrain(X, y)
+        self.trainer = pl.Trainer(
+            max_epochs=epochs, callbacks=self.callbacks,
+            logger=TensorBoardLogger(self.logdir, name=self.tensorboard),
+            enable_checkpointing=False, log_every_n_steps=1,
+            default_root_dir=self.logdir, enable_progress_bar=True)
+        
         self.trainer.fit(self.model, train_dataloaders=train_loader,
                          val_dataloaders=val_loader)
         
@@ -144,7 +155,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
                               self.N_OUTPUT, self.k, self.batch_solve, self.niter,
                               self.pmin, self.pmax, self.step, self.mV,
                               self.check_data, self.transformer,
-                              self.scale, self.clip)
+                              self.scale, self.OB_weight_initializers)
     
     ######################## DATA FORMATING
     def prepare_for_train(self, X, y):
@@ -153,7 +164,6 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         yv = self.transformer.transform(yv)
         
         NUM_WORKERS = 0
-        
         train_dataset = EPFDataset(X, y, dtype=self.dtype, N_OUTPUT=self.N_OUTPUT)
         val_dataset = EPFDataset(Xv, yv, dtype=self.dtype, N_OUTPUT=self.N_OUTPUT)
 
@@ -167,6 +177,26 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
             num_workers=NUM_WORKERS)
 
         return train_loader, val_loader
+
+    def prepare_for_retrain(self, X, y):
+        ((X, y), (Xv, yv)) = self.spliter(X, y)
+        y = self.transformer.transform(y)
+        yv = self.transformer.transform(yv)
+        
+        NUM_WORKERS = 0
+        train_dataset = EPFDataset(X, y, dtype=self.dtype, N_OUTPUT=self.N_OUTPUT)
+        val_dataset = EPFDataset(Xv, yv, dtype=self.dtype, N_OUTPUT=self.N_OUTPUT)
+
+        train_loader = DataLoader(
+            train_dataset,
+            batch_size=self.batch_size, shuffle=self.shuffle_train,
+            num_workers=NUM_WORKERS)
+        val_loader = DataLoader(
+            val_dataset,
+            batch_size=self.batch_size, shuffle=False,
+            num_workers=NUM_WORKERS)
+
+        return train_loader, val_loader    
 
     def prepare_for_test(self, X):        
         NUM_WORKERS = 0        

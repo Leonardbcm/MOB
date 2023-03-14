@@ -228,8 +228,10 @@ class TorchOrderBook(SimpleOrderBook):
             f = lambda x: x.detach().numpy() if type(x).__name__ == "Tensor" else x
             directions = ["Supply" if v > 0 else "Demand" for v in f(volumes)]
             
-            os = [LinearOrder(d, p0, p0 + p, abs(v)) for d, p0, p, v in zip(
-                directions, f(p0s), f(prices), f(volumes))]
+            os = [LinearOrder(d, p0, p0 + p, abs(v)) if p != 0
+                  else StepOrder(d, p0, abs(v))
+                  for d, p0, p, v in zip(
+                          directions, f(p0s), f(prices), f(volumes))]
             
             SimpleOrderBook.__init__(self, os)
             
@@ -274,7 +276,10 @@ class TorchOrderBook(SimpleOrderBook):
         return torch.cat([
             self.vs.reshape(-1, 1),
             self.pzeros.reshape(-1, 1),
-            self.ps.reshape(-1, 1)], axis=1).reshape(1, -1, 3)
+            self.ps.reshape(-1, 1)], axis=1).resOBhape(1, -1, 3)
+
+    def accepted_volume(self, l):
+        return np.sum([o.accepted_volume(l) for o in self.supply])
         
 class BinaryOrderBook(SimpleOrderBook):
     """

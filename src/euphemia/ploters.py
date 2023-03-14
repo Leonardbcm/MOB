@@ -400,7 +400,7 @@ class SimplePloter(Ploter):
         Ploter.__init__(self, order_book, solver, results)
     
     def display(self, ax_=None, schema=False, colors=None, labels=None,
-                linewidth=2, label_fontsize=20, fontsize=30,
+                linewidth=2, label_fontsize=20, fontsize=30, alpha=0.5,
                 fit_to_data=True, **kwargs):
         if ax_ is None:
             fig, ax = plt.subplots(1)
@@ -445,17 +445,17 @@ class SimplePloter(Ploter):
             ls = labels
             ld = None
             
-        ax.plot(supply, prange_supply, c=cs, label=ls)
-        ax.plot(demand, prange_demand, c=cd, label=ld)
-        
+        ax.plot(supply, prange_supply, c=cs, label=ls, linewidth=linewidth)
+        ax.plot(demand, prange_demand, c=cd, label=ld, linewidth=linewidth)
+            
         if labels is None:
-            ax.legend()
+            ax.legend(fontsize=fontsize)
             ax.set_ylim([pmin, pmax])
             ax.set_xlim([minv - xpad, maxv + xpad])            
             
-        ax.set_xlabel("Cumulated volume (MWh)")
-        ax.set_ylabel("Price (EUR/MWh)")        
-        ax.set_title("Aggregated Curves")    
+        ax.set_xlabel("Cumulated volume (MWh)", fontsize=fontsize)
+        ax.set_ylabel("Price (EUR/MWh)", fontsize=fontsize)        
+        ax.set_title("Aggregated Curves", fontsize=fontsize)    
         ax.grid("on")        
 
         if ax_ is None:
@@ -567,64 +567,275 @@ class SimplePloter(Ploter):
         else:
             return {}        
 
+        
 class MultiplePlotter(object):
-    def __init__(self, regr, X):
-        self.regr = regr
-        Xt, Xv = regr.steps[1][1].spliter(X)
-        self.X = Xt
+    def __init__(self, spliter, X,n_epochs,save_to_disk="",batch_size=30, OBs=None):
+        Xt, Xv = spliter(X)
+        self.nt = Xt.shape[0]
+        self.nv = Xv.shape[0]        
         
-        # 0) Get the callback
-        self.cb = regr.steps[1][1].callbacks[1]
-        self.n_epochs = len(self.cb.OBhats) - 1
-        self.n = self.X.shape[0]
-        self.OBs = self.cb.OBhats[0][0].shape[1]
+        self.save_to_disk = save_to_disk
+        self.batch_size = batch_size
+        self.n_epochs = n_epochs
         
-        # 1) reshape to n_epochs * n_batchs * n_per_batch * OBs * 3
-        self.OBhat = np.zeros((self.n_epochs, self.n, 24, self.OBs, 3))
-        self.yhat = np.zeros((self.n_epochs, self.n, 24))        
-        for i in range(self.n_epochs):
-            ep = self.cb.OBhats[i]
-            current = 0
-            for j, batch in enumerate(ep):
-                # Store OB
-                batch_reshaped = batch.reshape(-1, 24, self.OBs, 3)
-                bs = batch_reshaped.shape[0]
-                self.OBhat[i, current:current+bs] = batch_reshaped
+        self.OBs = OBs
 
-                # Store forecast
-                yhat = self.cb.yhats[i][j]
-                self.yhat[i, current:current+bs] = yhat
+    def n(self, dataset):
+        if dataset == "train":
+            return self.nt
+        if dataset == "validation":
+            return self.nv
+        return -1
+
+    def get_path(self, e, b, dataset):
+        return os.path.join(
+            self.save_to_disk, "epoch_" + str(e), f"{dataset}_batch_" + str(b))
+
+    def get_OBhat(self, e, d, h, dataset):
+        if e != -1:
+            batch = d // self.batch_size
+            d_ = d % self.batch_size
+            
+            if batch != 0:
+                raise Exception("Only the order book of the first batch is saved")
+            
+            path = os.path.join(self.get_path(e, batch, dataset), "OBhat.npy")
+            data = np.load(path)[24 * d_ + h]
+        else:
+            d_ = d-self.n(dataset)
+            path = os.path.join(self.save_to_disk, "OBvhat.npy")
+            data = np.load(path)[d_, h]
+        OB = TorchOrderBook(data)            
+        return OB
+
+    def get_yhat(self, e, d, h, dataset):
+        if dataset != "validation":
+            raise Exception(f"We don't have access to the {dataset} forecasts!")
+        if e != -1:
+            batch = d // self.batch_size
+            d_ = d % self.batch_size
+
+            if batch != 0:
+                raise Exception("Only the order book of the first batch is saved")
+            
+            path = os.path.join(self.get_path(e, batch, dataset), "yhat.npy")
+            yhat = np.load(path)[d_, h]
+        else:
+            d_ = d - self.n(dataset)
+            path = os.path.join(self.save_to_disk, "yvhat.npy")
+            yhat = np.load(path)[d_, h]
+        return yhat
+
+    def get_variable(self, variable, e, dataset):
+        if e != -1:
+            n_batches = (self.n(dataset)// self.batch_size) + 1            
+            values = np.zeros((self.n(dataset), 24, self.OBs))
+            current = 0
+            for b in range(n_batches):
+                path = self.get_path(e, b, dataset)
+                path_ = os.path.join(path, variable + ".npy")
+                batch = np.load(path_)
                 
+                batch_reshaped = batch.reshape(-1, 24, self.OBs)
+                bs = batch_reshaped.shape[0]
+                values[current:current+bs] = batch_reshaped
                 current += bs
+        else:
+            path = os.path.join(self.save_to_disk, "OBvhat.npy")
+            if "V" in variable:
+                ind = 0
+            elif "Po" in variable:
+                ind = 1
+            else:
+                ind = 2
+            values = np.load(path)[:, ind]
+                
+        return values
            
-    def display(self, d, h, ax_=None, linewidth=2, label_fontsize=20, fontsize=30,
-                colormap='copper_r', epochs=-1, **kwargs):
+    def display(self, d, h, dataset, ax_=None, linewidth=2, fontsize=30,
+                colormap='copper_r', epochs=None, **kwargs):
         if ax_ is None:
-            fig, (ax, axp) = plt.subplots(2)
+            fig, ax = plt.subplots(1, figsize=(19.2, 10.8))
         else:
             ax = ax_
 
         cmap = plt.get_cmap(colormap)
-        if epochs==-1:
+        if epochs is None:
             epochs = range(self.n_epochs)
             
         for i, e in enumerate(epochs):
-            OB = TorchOrderBook(self.OBhat[e, d, h])
+            OB = self.get_OBhat(e, d, h, dataset)            
+            yhat = self.get_yhat(e, d, h, dataset)
+            
             ploter = get_ploter(OB)
+            if e != -1:
+                color_index = (i + 1) / (len(epochs) + 1)
+                color = cmap(color_index)
+            else:
+                color = "r"
 
-            color_index = (i + 1) / (len(epochs) + 1)
-            ploter.display(ax_=ax, fit_to_data=False,
-                           colors=cmap(color_index), labels=f"Epoch {e}")
-        ax.legend()
-        axp.plot(epochs, self.yhat[epochs, d, h], marker=".", markersize=10)
-        axp.set_ylabel("Price forecast")
-        axp.set_xlabel("Epochs")
-        axp.grid("on")
+            v = OB.accepted_volume(yhat)
+            ax.scatter(v, yhat, marker="X", s=200, color=color)
+            ploter.display(ax_=ax, fit_to_data=False, linewidth=linewidth,alpha=0.5,
+                           colors=color, labels=f"Epoch {e}", fontsize=fontsize)
+        ax.legend(fontsize=fontsize)
         
         if ax_ is None:
             plt.show()
         else:
             return {}
+
+    def distribution(self, dataset, ax_=None, steps=-1, epochs=None, variables=-1,
+                     linewidth=2, label_fontsize=20, 
+                     fontsize=30, colormap='hsv', **kwargs):
+        cmap = plt.get_cmap(colormap)
+
+        ylabels = ["Out of base NN", "After Scaling", "After signs"]
+        base_variables = np.array(["V", "Po", "PoP", "P"])
+        if epochs is None:
+            epochs = range(self.n_epochs)
+            
+        if steps==-1:
+            steps = [1, 2, 3]
+        elif type(steps).__name__ != 'list':
+            steps = [steps]
+            
+        if variables!=-1:
+            base_variables = base_variables[variables]
+
+        if ax_ is None:
+            fig, axes = plt.subplots(len(steps), len(base_variables),
+                                     sharey="row", sharex="col",
+                                     gridspec_kw={"hspace" : 0.0, "wspace" : 0.0})
+            axes = axes.reshape(len(steps), len(base_variables))
+        else:
+            axes = ax_
+
+        for x, step in enumerate(steps):
+            axes[x, 0].set_ylabel(ylabels[step - 1])
+            variables = [f"{v}{step}" for v in base_variables]
+            for y, variable in enumerate(variables):
+                for i, e in enumerate(epochs):
+                    values = self.get_variable(variable, e, dataset)
+                    color_index = (i + 1) / (len(epochs) + 1)
+                    axes[x, y].hist(
+                        values.reshape(-1), bins=500, histtype="step",
+                        color=cmap(color_index), label=f"Epoch {e}",
+                        linewidth=linewidth)
+                    axes[x, y].tick_params(labelsize=fontsize)
+                
+                axes[x, y].set_title(variable, y=0.85)
+                axes[x, y].grid("on")
+
+        axes[x, y].legend()
+        plt.suptitle("Variable distribution accross epochs")
+        
+        if ax_ is None:
+            plt.show()
+        else:
+            return {}
+
+        
+class ExpPloter(object):
+    def __init__(self, ploters, save_path):
+        # A dict of ploters
+        self.ploters = ploters
+        self.save_path = save_path
+
+    def price_forecasts(self, Yv, fontsize=20):
+        fig, axes = plt.subplots(
+            3, 2, figsize=(19.2, 10.8), sharex=True, sharey=True,
+            gridspec_kw={"wspace" : 0.0, "hspace" : 0.0})
+        axes = axes.flatten()
+
+        for name, ax in zip(self.ploters.keys(), axes):
+            yvhat = np.load(os.path.join(self.save_path, name, "yvhat.npy"))
+            ax.plot(yvhat.reshape(-1), c="r")
+            ax.plot(Yv.reshape(-1), c="b")
+            ax.grid("on")
+            ax.set_xticklabels([])
+
+        # Add a legend
+        blue, = ax.plot([1, 1], c="b")
+        red, = ax.plot([1, 1], c="r")
+        fig.legend([blue, red], ['$Y$', '$\widehat{Y}$'], fontsize=fontsize,
+                   ncols=2, loc=8)
+
+        # Set lines labels
+        axes[0].set_ylabel("No scaling", fontsize=fontsize)
+        axes[2].set_ylabel("Scaling $\widehat{OB}$", fontsize=fontsize)
+        axes[4].set_ylabel("Weight Initalization", fontsize=fontsize)
+
+        # Set columns labels
+        axes[0].set_title("$Y$", fontsize=fontsize)
+        axes[1].set_title("$Y_{transformed}$", fontsize=fontsize)
+
+    def price_forecasts_distributions(self, Yv, fontsize=20, linewidth=4):
+        fig, axes = plt.subplots(
+            1, 3, figsize=(19.2, 10.8))
+        axes = axes.flatten()                
+        for name in self.ploters.keys():
+            ax = axes[int(name[1]) - 1]
+            
+            yvhat = np.load(os.path.join(self.save_path, name, "yvhat.npy"))
+            color = ["b", "r"][int(name[-1]) - 1]
+            ax.hist(yvhat.reshape(-1), histtype='step', bins=100, color=color,
+                    linewidth=linewidth)
+            ax.hist(Yv.reshape(-1), histtype='step', bins=100, color="g",
+                    linewidth=linewidth)            
+            ax.grid("on")
+            ax.set_yticklabels([])
+            
+        axes[0].set_title("No scaling", fontsize=fontsize)
+        axes[1].set_title("Scaling $\widehat{OB}$", fontsize=fontsize)
+        axes[2].set_title("Weight Initalization", fontsize=fontsize)            
+
+        # Add a legend
+        blue, = ax.plot([1, 1], c="b", linewidth=linewidth)
+        red, = ax.plot([1, 1], c="r", linewidth=linewidth)
+        green, = ax.plot([1, 1], c="g", linewidth=linewidth)
+        fig.legend([blue, red, green], ["$Y$", "$Y_{transformed}$", "Real Prices"],
+                   fontsize=fontsize, ncols=3, loc=8)
+
+    def distribution(self, distribution, fontsize=20, linewidth=4):
+        fig, axes = plt.subplots(3, 2, figsize=(19.2, 10.8),
+                                 gridspec_kw={"wspace" : 0.0})
+
+        colormaps = ["Blues", "Reds"]
+        for p in self.ploters.keys():
+            line = int(p[1])
+            color = colormaps[int(p[-1]) - 1]
+            axes_line = axes[line-1, :].reshape(1, -1)
+            
+            ploter = self.ploters[p]
+            
+            # Plot tensor distirbution across epochs
+            ploter.distribution(distribution,
+                epochs=[0], steps=3, variables=[1, 3], colormap=color,
+                ax_=axes_line, fontsize=fontsize, linewidth=linewidth)
+
+        # Correct things for the plot
+        axes = axes.flatten()
+        for ax in axes:
+            ax.set_yticklabels([])
+            ax.set_title("")
+            leg = ax.get_legend()
+            if leg is not None:
+                leg.remove()
+
+        # Set lines labels
+        axes[0].set_ylabel("No scaling", fontsize=fontsize)
+        axes[2].set_ylabel("Scaling $\widehat{OB}$", fontsize=fontsize)
+        axes[4].set_ylabel("Weight Initalization", fontsize=fontsize)
+
+        # Set columns labels
+        axes[0].set_title("Po", fontsize=fontsize)
+        axes[1].set_title("P", fontsize=fontsize)
+
+        # Add a legend
+        blue, = ax.plot([1, 1], c=plt.get_cmap(colormaps[0])(0.5))
+        red, = ax.plot([1, 1], c=plt.get_cmap(colormaps[1])(0.5))
+        ax.legend([blue, red], ['$Y$', '$Y_{transformed}$'], fontsize=fontsize)
 
         
 class ExamplePloter(object):

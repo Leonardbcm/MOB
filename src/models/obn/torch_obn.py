@@ -8,7 +8,7 @@ from src.models.obn.torch_solver import PFASolver, BatchPFASolver
 class SolvingNetwork(LightningModule):
     def __init__(self, din, NN1, OBs, OB_input, batch_norm, criterion, N_OUTPUT, k,
                  batch_solve, niter, pmin, pmax, step, mV, check_data, transformer,
-                 scale, clip):
+                 scale, OB_weight_initializers):
         LightningModule.__init__(self)
         self.NN1_input = list(NN1)
         
@@ -33,8 +33,8 @@ class SolvingNetwork(LightningModule):
         self.pmax = pmax
         self.step = step
         self.mV = mV
-        self.clip = clip
         self.scale = scale
+        self.OB_weight_initializers = OB_weight_initializers
 
         ################ Construct the feature extracter NN1
         nn_layers = []
@@ -49,18 +49,48 @@ class SolvingNetwork(LightningModule):
 
         ############## Construct the OrderBook forecaster
         OB_layers = []
-        for (din, dout) in zip([self.in_obs]+self.OB_input,
-                               self.OB_input + [3 * self.OBs]):
+        for (din, dout) in zip([self.in_obs] + self.OB_input[:-1], self.OB_input):
             if self.batch_norm:
                 OB_layers.append(torch.nn.BatchNorm1d(din))
+                
             OB_layers.append(torch.nn.Linear(din, dout))
-
-            # Don't add relu for the last layer
-            if dout != 3 * self.OBs:
-                OB_layers.append(torch.nn.ReLU())
+            OB_layers.append(torch.nn.ReLU())
             
         self.OB_layers = torch.nn.Sequential(*OB_layers)
+        self.OB_out = self.OB_input[-1]
+        
+        ############## Intialize the V, Po, P layers
+        containers = {"vlayers" : [], "polayers" : [], "poplayers" : []}       
+        for container in containers.keys():
+            c_layers = containers[container]
+            if self.batch_norm:
+                c_layers.append(torch.nn.BatchNorm1d(self.OB_out))
 
+            forecast_layer = torch.nn.Linear(self.OB_out, self.OBs)            
+            # Special weight init
+            if container in self.OB_weight_initializers.keys():
+                inits = self.OB_weight_initializers[container]
+                for init in inits:
+                    # Udpate the layer intializer using the transformer
+                    init.update(self.transformer)
+
+                    # Intialize the layer
+                    init(forecast_layer)
+                    
+            c_layers.append(forecast_layer)
+
+            # Desctivate for now
+            if False:
+                if self.scale == "MinMax":
+                    scaler=TorchMinMaxScaler(a=self.pmin_scaled,b=self.pmax_scaled)
+                if self.scale == "Clip":
+                    scaler = TorchCliper(self.pmin_scaled, self.pmax_scaled)
+                if (self.scale != "") and (container in ("polayers", "poplayers")):
+                    c_layers.append(scaler)                
+            
+            seq = torch.nn.Sequential(*c_layers)
+            setattr(self, container, seq)
+                
         ############## Create the solver with the correct bounds
         self.create_solver()
         
@@ -85,7 +115,7 @@ class SolvingNetwork(LightningModule):
                 niter=self.niter, pmin=self.pmin, pmax=self.pmax,
                 k=self.k, mV=self.mV, check_data=self.check_data)        
         
-    def forward(self, x, predict_order_books=False):
+    def forward(self, x, predict_order_books=False, return_parts=""):
         ############## 1] Forecast Order Books
         # Extract features for each day
         x = self.NN1(x)
@@ -96,40 +126,48 @@ class SolvingNetwork(LightningModule):
         # Forecast order books for each hour
         x =  self.OB_layers(x)
 
-        ############## 2] Format Order Books
-        x = x.reshape(-1, self.OBs, 3)
-        V, Po, PoP = x[:, :, 0], x[:, :, 1], x[:, :, 2]        
-
-        # Scale the forecsted price to the price range
-        if self.scale:
-            Po = MinMaxScaler(a=self.pmin_scaled, b=self.pmax_scaled)(Po)        
-            PoP = MinMaxScaler(a=self.pmin_scaled, b=self.pmax_scaled)(PoP)
-            
-            # Scale the volumes so that they are not too small
-            # V = MinAbsScaler(m=self.mV)(V)            
-        elif self.clip:
-            Po = Cliper(self.pmin_scaled, self.pmax_scaled)(Po)
-            PoP = Cliper(self.pmin_scaled, self.pmax_scaled)(PoP)
-
-            # Clip the volumes so that they are not too small
-            # V = AbsCliper(self.mV, k=self.k)(V)
-
+        V = self.vlayers(x)
+        Po = self.polayers(x)
+        PoP = self.poplayers(x)
+        P = PoP - Po
+        
+        if return_parts == "step_1":
+            return V, Po, PoP, P
+        
+        ############## 2] Fit OB to the domain        
+        if self.scale == "MinMax":
+            Po = TorchMinMaxScaler(a=self.pmin_scaled, b=self.pmax_scaled)(Po)
+            PoP = TorchMinMaxScaler(a=self.pmin_scaled, b=self.pmax_scaled)(PoP)
+        if self.scale == "Clip":
+            Po = TorchCliper(self.pmin_scaled, self.pmax_scaled)(Po)
+            PoP = TorchCliper(self.pmin_scaled, self.pmax_scaled)(PoP)     
+                        
         # Compute P
         P = PoP - Po
-
-        # Store the percentage of demand orders
-        self.perc_neg = 100 * torch.mean(torch.where(P < 0, 1.0, 0.0))
+        if return_parts == "step_2":
+            return V, Po, PoP, P          
+            
+        # Handle signs
+        Ss = torch.sigmoid(self.k * P)
+        signs = 2.0 * Ss - 1.0 + 4 * Ss * (1 - Ss)        
         
         # Ensure that V and P have the same sign
-        psigns = 2.0 * torch.sigmoid(self.k * P) - 1.0
-        V = torch.abs(V) * psigns
+        V = torch.abs(V) * signs
+        P = torch.abs(P) * signs
 
-        # Reconstruct the OB
+        PoP = Po + P
+        if return_parts == "step_3":
+            return V, Po, PoP, P           
+            
+        # Store the percentage of demand orders
+        self.perc_neg = 100 * torch.mean(torch.where(P < 0, 1.0, 0.0))
+
+        # Reconstruct the OB        
         x = torch.cat([
             V.reshape(-1, self.OBs, 1),
             Po.reshape(-1, self.OBs, 1),
             P.reshape(-1, self.OBs, 1)], axis=2)
-        
+
         if predict_order_books:
             return x
         

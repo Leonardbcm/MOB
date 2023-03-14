@@ -23,11 +23,11 @@ class OBNWrapper(ModelWrapper):
         return {
             # Network Architecture
             "N_OUTPUT" : len(self.label),            
-            "NN1" : (900, 888),
-            "OBs" : 50,
-            "OBN" : (100, ),            
-            "k" : 30,
-            "niter" : 20,
+            "NN1" : (888, ),
+            "OBs" : 100,
+            "OBN" : (37, ),            
+            "k" : 100,
+            "niter" : 30,
             "batch_solve" : True, 
             "batch_norm" : True,
             "pmin" : -500,
@@ -35,20 +35,20 @@ class OBNWrapper(ModelWrapper):
             "step" : 0.01,
             "mV" : 0.1,
             "check_data" : False,
-            "clip" : False,
-            "scale" : False,
-            "store_OBhat" : False,
 
             # Log params
+            "store_OBhat" : False,            
             "store_losses" : False,
             "tensorboard" : "",
             
             # Scaling Parameters
             "scaler" : "BCM",
             "transformer" : "Standard",
+            "OB_weight_initializers" : None,
+            "scale" : False,            
 
             # Training Params            
-            "spliter" : self.spliter, 
+            "spliter" : self.spliter,
             "n_epochs" : 100000,
             "batch_size" : 30,
             "early_stopping" : "sliding_average",
@@ -78,7 +78,13 @@ class OBNWrapper(ModelWrapper):
         scaler = regr.steps[0][1]
         
         OBhat = model.predict_order_books(scaler.transform(X))
-        return OBhat    
+        return OBhat
+
+    def refit(self, regr, X, y, epochs=1):
+        model = regr.steps[1][1]
+        scaler = regr.steps[0][1]
+        
+        model.refit(scaler.transform(X), y, epochs=epochs)                
     
     def string(self):
         return "OBN"
