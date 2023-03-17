@@ -1,16 +1,23 @@
 %load aimport
 
 from sklearn.metrics import mean_absolute_error
+
 from src.euphemia.orders import *
 from src.euphemia.order_books import *
 from src.euphemia.solvers import *
 from src.euphemia.ploters import *
-from src.models.obn_wrapper import OBNWrapper
-from src.models.weight_initializers import *
+
+from src.models.spliter import MySpliter
+from src.models.torch_wrapper import OBNWrapper
+from src.models.torch_models.weight_initializers import *
 from src.models.parallel_scikit import set_all_seeds
 
-model_wrapper = OBNWrapper("TEST", "Lyon", countries_to_predict="not_graph")
+############## Construct model wrapper and load data
+spliter = MySpliter(365, shuffle=False)
+model_wrapper = OBNWrapper("TEST", "Lyon", spliter=spliter)
 X, Y = model_wrapper.load_train_dataset()
+
+############## Set some params
 ptemp = model_wrapper.params()
 ptemp["transformer"] = ""
 ptemp["NN1"] = (888, )
@@ -19,24 +26,23 @@ ptemp["OBs"] = 100
 ptemp["early_stopping"] = None
 ptemp["n_epochs"] = 5
 ptemp["tensorboard"] = "OBN"
-ptemp["store_losses"] = True
-ptemp["store_OBhat"] = True
-ptemp["scale"] = "Clip"
-ptemp["k"] = 100
-ptemp["niter"] = 30
 ptemp["OB_weight_initializers"] = {
-    "polayers" : [Initializer("normal", "weight", 1, 1),
+    "polayers" : [Initializer("normal", "weight", 0, 1),
                   BiasInitializer("normal", 30, 40, -500, 3000)],
-    "poplayers" : [Initializer("normal", "weight", 1, 1),
+    "poplayers" : [Initializer("normal", "weight", 0, 1),
                    BiasInitializer("normal", 30, 40, -500, 3000) ]}
 regr = model_wrapper.make(ptemp)
+
+############## Fit model and predict validation set
+(Xt, Yt), (Xv, Yv) = model_wrapper.spliter(X, Y)
+
 set_all_seeds(0)
 regr.fit(X, Y)
-yhat = model_wrapper.predict_test(regr, X)
-OBhat = model_wrapper.predict_order_books(regr, X)
-mean_absolute_error(Y, yhat)
+yhat = model_wrapper.predict_val(regr, Xv)
+mean_absolute_error(Yv, yhat)
 
 # Forecasted OB for each epoch (train forecast used for the gradient)
+OBhat = model_wrapper.predict_order_books(regr, Xv)
 ploter = MultiplePlotter(regr, X)
 ploter.display(0, 0, epochs=-1, colormap="viridis")
 

@@ -4,7 +4,7 @@ from numpy.random import default_rng
 
 SPLITER_SEED = 90125
 
-class MySplitter(object):
+class MySpliter(object):
     def __init__(self, validation_ratio, shuffle=False):
         self.validation_ratio = validation_ratio
         self.shuffle = shuffle
@@ -44,5 +44,5 @@ class MySplitter(object):
         return ((Xtr, ytr), (Xv, yv))
 
     def __str__(self):
-        return f"MySplitter_{str(self.validation_ratio)}_str{self.shuffle}"
+        return f"MySpliter_{str(self.validation_ratio)}_str{self.shuffle}"
         

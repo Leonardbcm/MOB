@@ -2,8 +2,8 @@ import torch, time, numpy as np
 from pytorch_lightning import LightningModule
 from torch import nn
 
-from src.models.scalers import TorchMinMaxScaler, TorchMinAbsScaler, TorchCliper
-from src.models.obn.torch_solver import PFASolver, BatchPFASolver
+from src.models.torch_models.scalers import TorchMinMaxScaler, TorchMinAbsScaler, TorchCliper
+from src.models.torch_models.torch_solver import PFASolver, BatchPFASolver
 
 class SolvingNetwork(LightningModule):
     def __init__(self, din, NN1, OBs, OB_input, batch_norm, criterion, N_OUTPUT, k,

@@ -1,20 +1,28 @@
 from sklearn.pipeline import make_pipeline
 from sklearn.compose import TransformedTargetRegressor
 
-from src.models.spliter import MySplitter
+from src.models.spliter import MySpliter
 from src.models.model_wrapper import *
-from src.models.obn.obn import OrderBookNetwork
+from src.models.torch_models.obn import OrderBookNetwork
 
-class OBNWrapper(ModelWrapper):
-    def __init__(self, prefix, dataset_name, spliter=None,
-                 predict_two_days=False, replace_ATC="",
-                 known_countries=["CH", "GB"], countries_to_predict="all"):
-        ModelWrapper.__init__(self, prefix, dataset_name,
-                              spliter=spliter, predict_two_days=predict_two_days,
-                              known_countries=known_countries,
-                              replace_ATC=replace_ATC,
-                              countries_to_predict=countries_to_predict)
-        if spliter is None: spliter = MySplitter(0.25)        
+
+class TorchWrapper(ModelWrapper):
+    """
+    Base wrapper for all torch-based models
+    """
+    def __init__(self, prefix, dataset_name, spliter=None, country=""):
+        ModelWrapper.__init__(
+            self, prefix, dataset_name, spliter=spliter, country=country)
+
+
+class OBNWrapper(TorchWrapper):
+    """
+    Wrapper for all predict order books then optimize models
+    """    
+    def __init__(self, prefix, dataset_name, spliter=None, country=""):
+        TorchWrapper.__init__(
+            self, prefix, dataset_name, spliter=spliter, country=country)
+        if spliter is None: spliter = MySpliter(0.25)        
         self.spliter = spliter
         self.external_spliter = None        
         self.validation_mode = "internal"
@@ -58,6 +66,7 @@ class OBNWrapper(ModelWrapper):
 
             # Optimizer Params
             "criterion" : "HuberLoss",
+            "n_cpus" : -1,
         }
 
     def make(self, ptemp):

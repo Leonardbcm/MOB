@@ -3,7 +3,8 @@ from ast import literal_eval as make_tuple
 
 import src.models.spliter as SPL
 
-base_folder = os.environ['MOB']
+def base_folder():
+    return os.environ['MOB']
 
 def flatten_dict(d):
     res = []
@@ -16,7 +17,7 @@ def flatten_dict(d):
     return res
 
 def default_dataset_path(dataset_name):
-    return os.path.join(base_folder, "data", "datasets", dataset_name)
+    return os.path.join(base_folder(), "data", "datasets", dataset_name)
 
 def all_dataset_path(dataset_name):
     return os.path.join(default_dataset_path(dataset_name), "all.csv")
@@ -34,10 +35,10 @@ def test_dataset_path(dataset_name):
     return os.path.join(default_dataset_path(dataset_name), "test.csv")
 
 def folder(dataset_name):
-    return os.path.join(base_folder, "data", "datasets", dataset_name)
+    return os.path.join(base_folder(), "data", "datasets", dataset_name)
 
 def figure_folder(dataset_name):
-    return os.path.join(base_folder, "figures", dataset_name)
+    return os.path.join(base_folder(), "figures", dataset_name)
 
 def save_name(prefix, dataset_name):
     return prefix + "_" + dataset_name

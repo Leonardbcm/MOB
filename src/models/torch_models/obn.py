@@ -4,8 +4,8 @@ from torch.utils.data import Dataset, DataLoader
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.metrics import mean_absolute_error
 
-from src.models.obn.torch_obn import SolvingNetwork
-from src.models.callbacks import *
+from src.models.torch_models.torch_obn import SolvingNetwork
+from src.models.torch_models.callbacks import *
 
 class OrderBookNetwork(BaseEstimator, RegressorMixin):
     """
@@ -51,6 +51,13 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         self.transformer = model_["transformer"]
         self.OB_weight_initializers = model_["OB_weight_initializers"]    
         self.scale = model_["scale"]
+
+        # Parallelization params
+        self.n_cpus = model_["n_cpus"]
+        if self.n_cpus == -1:
+            self.n_cpus_ = os.cpu_count()
+        else:
+            self.n_cpus_ = self.n_cpus
 
     def set_params(self, **parameters):
         for parameter, value in parameters.items():            
@@ -163,7 +170,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         y = self.transformer.fit_transform(y)
         yv = self.transformer.transform(yv)
         
-        NUM_WORKERS = 0
+        NUM_WORKERS = self.n_cpus_
         train_dataset = EPFDataset(X, y, dtype=self.dtype, N_OUTPUT=self.N_OUTPUT)
         val_dataset = EPFDataset(Xv, yv, dtype=self.dtype, N_OUTPUT=self.N_OUTPUT)
 
@@ -183,7 +190,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         y = self.transformer.transform(y)
         yv = self.transformer.transform(yv)
         
-        NUM_WORKERS = 0
+        NUM_WORKERS = self.n_cpus_
         train_dataset = EPFDataset(X, y, dtype=self.dtype, N_OUTPUT=self.N_OUTPUT)
         val_dataset = EPFDataset(Xv, yv, dtype=self.dtype, N_OUTPUT=self.N_OUTPUT)
 
@@ -199,7 +206,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         return train_loader, val_loader    
 
     def prepare_for_test(self, X):        
-        NUM_WORKERS = 0        
+        NUM_WORKERS = self.n_cpus_
         test_dataset = EPFDataset(X, dtype=self.dtype, N_OUTPUT=self.N_OUTPUT)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size,
                                  num_workers=NUM_WORKERS)

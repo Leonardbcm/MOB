@@ -166,3 +166,21 @@ for parameters, name in zip([p12, p31, p32],
     
     np.save(os.path.join(save_path, name, "full_yvhat.npy"), yhat)
     np.save(os.path.join(save_path, name, "full_OBvhat.npy"), OBhat)
+
+maes = {}
+for parameters, name in zip([p12, p31, p32],
+                            ["P12", "P31", "P32"]):
+    param_temps = copy.deepcopy(params)
+    param_temps.update(parameters)    
+    
+    # Forecasted OB for each epoch (train forecast used for the gradient)
+    ploter = MultiplePlotter(
+        model_wrapper.spliter, X, param_temps["n_epochs"],
+        save_to_disk=param_temps["store_OBhat"],
+        batch_size=param_temps["batch_size"], OBs=param_temps["OBs"])
+    ploters[name] = ploter
+
+    # Load and compute MAE
+    yhat = np.load(os.path.join(save_path, name, "full_yvhat.npy"))
+    maes[name] = mean_absolute_error(Yv, yhat)
+    

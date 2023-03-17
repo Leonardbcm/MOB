@@ -16,8 +16,8 @@ class ModelWrapper(object):
     grid searches.
     """
     def __init__(self, prefix, dataset_name, country="", spliter=None,
-                 predict_two_days=False, known_countries=[], replace_ATC="",
-                 countries_to_predict="not_graph"):
+                 predict_two_days=False, known_countries=["CH", "GB"],
+                 flow_estimation="",  countries_to_predict="not_graph"):
         self.prefix = prefix
         self.dataset_name = dataset_name
         self.country = country
@@ -38,7 +38,7 @@ class ModelWrapper(object):
         # Specify if we load graph data or not (for transforming edges)
         self.known_countries = known_countries
         self.countries_to_predict_ = countries_to_predict
-        self.replace_ATC = replace_ATC
+        self.flow_estimation = flow_estimation
 
         # For differentiating price and edge labels,
         # will be overwritten for graphs
@@ -64,10 +64,10 @@ class ModelWrapper(object):
         return folder
 
     def results_path(self):
-        replace_ATC = ""
-        #if self.replace_ATC != "":
-        #    replace_ATC = f"_{self.replace_ATC}"
-        return self.save_path() + f"_results{replace_ATC}.csv" 
+        flow_estimation= ""
+        #if self.flow_estimation != "":
+        #    flow_estimation = f"_{self.flow_estimation}"
+        return self.save_path() + f"_results{flow_estimation}.csv" 
     
     def train_dataset_path(self):
         return mu.train_dataset_path(self.dataset_name)
@@ -111,7 +111,7 @@ class ModelWrapper(object):
     
     def test_recalibrated_prediction_path(self, filters=None,inverted_filters=None):
         return mu.test_recalibrated_prediction_path(
-            self.prefix, self.dataset_name, self.replace_ATC,
+            self.prefix, self.dataset_name, self.flow_estimation,
             filters, inverted_filters)
     
     def extra_prediction_path(self):
@@ -124,7 +124,8 @@ class ModelWrapper(object):
         return mu.test_shape_path(self.prefix, self.dataset_name)
 
     def test_recalibrated_shape_path(self):
-        return mu.test_recalibrated_shape_path(self.prefix, self.dataset_name, self.replace_ATC)
+        return mu.test_recalibrated_shape_path(
+            self.prefix, self.dataset_name, self.flow_estimation)
 
     def _params(self, ptemp):
         p = self.params()
@@ -350,9 +351,9 @@ class ModelWrapper(object):
         self.label = np.concatenate((price_labels, edge_labels))
 
         # Replace the atcs if specified
-        if self.replace_ATC != "":
+        if self.flow_estimation != "":
             ATC_file = os.path.join(os.environ["VOLTAIRE"], "data", "datasets",
-                                    "OnlyATC", f"joined_{self.replace_ATC}.csv")
+                                    "OnlyATC", f"joined_{self.flow_estimation}.csv")
             ATCs = pandas.read_csv(ATC_file, index_col="period_start_date")
             ATCs = ATCs.loc[dataset.period_start_date]
             for edge in self.edges_columns:
@@ -802,19 +803,19 @@ class ModelWrapper(object):
         res[:, :, 2] =  rmaes[np.array(success)][:, indices].transpose()
         return res    
 
-    def replace_ATC_string(self, F=False):
+    def flow_estimation_string(self, F=False):
         if F: res = "\_F"
         else: res = "\_"
-        if self.replace_ATC == "":
+        if self.flow_estimation == "":
             if "NEConv" in self.prefix:
                 return res + "NE"
             else:
                 return "\_A"
-        if self.replace_ATC == "WithPrice":
+        if self.flow_estimation == "WithPrice":
             return res + "lin"
-        if self.replace_ATC == "LeastSquares":
+        if self.flow_estimation == "LeastSquares":
             return res + "lsq"
-        if self.replace_ATC == "combined":
+        if self.flow_estimation == "combined":
             return res + "cmb"
-        if self.replace_ATC == "combined_unilateral":
-            return res + "os"      
+        if self.flow_estimation == "combined_unilateral":
+            return res + "os"

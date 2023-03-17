@@ -10,13 +10,13 @@ from src.analysis.evaluate import ACC
 
 ## Seed settings
 os.environ['PYTHONHASHSEED'] = '90125'
-import numpy, random
+import numpy, random, tensorflow as tf
 from numpy.random import seed
-import random
 
 def set_all_seeds(SEED=90125, env=True):
     seed(SEED)
     random.seed(SEED)
+    tf.random.set_seed(SEED)    
     torch.manual_seed(SEED)
     if env: os.environ['HYPEROPT_FMIN_SEED'] = f"{SEED}"      
 
@@ -164,12 +164,14 @@ def parallelize(n_cpus, model, param_list, X, y, seeds=None, return_regr=False,
         n_tested = 0
     n_combis = len(param_list)
 
-    # If the model has self validation (DNN, CNN, GNN),
+    # If the model has self validation (DNN, CNN, GNN, OBN),
     # then outer validation does
     # nothing. Otherwise, this splits the validation set.
     X, y, Xv, yv = outer_validation(
         model.validation_mode, model.external_spliter, X, y)
-    if n_cpus != 1:
+
+    # Parallelize training if the number of cpus is not 1
+    if n_cpus != 1:        
         results = Parallel(n_jobs=n_cpus)(
             delayed(to_parallelize)(
                 i, model, param_list, X, y,
@@ -179,10 +181,7 @@ def parallelize(n_cpus, model, param_list, X, y, seeds=None, return_regr=False,
             for i in range(n_combis))
     else:
         NUM_WORKERS = len(os.sched_getaffinity(0))
-        print(f"USING {NUM_WORKERS} WORKERS to parallelize GNN")
         torch.set_num_threads(NUM_WORKERS)
-
-        # With torch, models are already trained in parallel!
         results = [to_parallelize(
             i, model, param_list, X, y,
             n_combis, n_tested,            
