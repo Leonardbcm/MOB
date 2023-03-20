@@ -8,7 +8,7 @@ from src.models.torch_models.torch_solver import PFASolver, BatchPFASolver
 class SolvingNetwork(LightningModule):
     def __init__(self, din, NN1, OBs, OB_input, batch_norm, criterion, N_OUTPUT, k,
                  batch_solve, niter, pmin, pmax, step, mV, check_data, transformer,
-                 scale, OB_weight_initializers):
+                 scale, weight_initializers):
         LightningModule.__init__(self)
         self.NN1_input = list(NN1)
         
@@ -34,11 +34,14 @@ class SolvingNetwork(LightningModule):
         self.step = step
         self.mV = mV
         self.scale = scale
-        self.OB_weight_initializers = OB_weight_initializers
+        self.weight_initializers = weight_initializers
+        self.OB_weight_initializers = {
+            "polayers" : self.weight_initializers,
+            "poplayers" : self.weight_initializers}
 
         ################ Construct the feature extracter NN1
         nn_layers = []
-        for (din, dout) in zip([self.din]+self.NN1_input[:-1], self.NN1_input):
+        for (din, dout) in zip([self.din] + self.NN1_input[:-1], self.NN1_input):
             if self.batch_norm:
                 nn_layers.append(torch.nn.BatchNorm1d(din))
             nn_layers.append(torch.nn.Linear(din, dout))
@@ -47,17 +50,21 @@ class SolvingNetwork(LightningModule):
 
         self.in_obs = int(self.NN1_input[-1] / 24)
 
-        ############## Construct the OrderBook forecaster
+        ############## Construct the OrderBook forecaster if at least 1 layer
         OB_layers = []
-        for (din, dout) in zip([self.in_obs] + self.OB_input[:-1], self.OB_input):
-            if self.batch_norm:
-                OB_layers.append(torch.nn.BatchNorm1d(din))
+        self.OB_out = self.in_obs
+        if len(self.OB_input) > 0:
+            self.OB_out = self.OB_input[-1]
+            for (din, dout) in zip(
+                    [self.in_obs] + self.OB_input[:-1],
+                    self.OB_input):
+                if self.batch_norm:
+                    OB_layers.append(torch.nn.BatchNorm1d(din))
                 
-            OB_layers.append(torch.nn.Linear(din, dout))
-            OB_layers.append(torch.nn.ReLU())
+                OB_layers.append(torch.nn.Linear(din, dout))
+                OB_layers.append(torch.nn.ReLU())
             
         self.OB_layers = torch.nn.Sequential(*OB_layers)
-        self.OB_out = self.OB_input[-1]
         
         ############## Intialize the V, Po, P layers
         containers = {"vlayers" : [], "polayers" : [], "poplayers" : []}       
@@ -66,7 +73,8 @@ class SolvingNetwork(LightningModule):
             if self.batch_norm:
                 c_layers.append(torch.nn.BatchNorm1d(self.OB_out))
 
-            forecast_layer = torch.nn.Linear(self.OB_out, self.OBs)            
+            forecast_layer = torch.nn.Linear(self.OB_out, self.OBs)
+            
             # Special weight init
             if container in self.OB_weight_initializers.keys():
                 inits = self.OB_weight_initializers[container]
@@ -77,16 +85,7 @@ class SolvingNetwork(LightningModule):
                     # Intialize the layer
                     init(forecast_layer)
                     
-            c_layers.append(forecast_layer)
-
-            # Desctivate for now
-            if False:
-                if self.scale == "MinMax":
-                    scaler=TorchMinMaxScaler(a=self.pmin_scaled,b=self.pmax_scaled)
-                if self.scale == "Clip":
-                    scaler = TorchCliper(self.pmin_scaled, self.pmax_scaled)
-                if (self.scale != "") and (container in ("polayers", "poplayers")):
-                    c_layers.append(scaler)                
+            c_layers.append(forecast_layer)              
             
             seq = torch.nn.Sequential(*c_layers)
             setattr(self, container, seq)

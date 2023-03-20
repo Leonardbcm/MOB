@@ -1,7 +1,10 @@
-%load aimport
+#%load aimport
+
+import os
 
 from src.models.svr_wrapper import ChainSVRWrapper, MultiSVRWrapper
-from src.models.obn_wrapper import OBNWrapper
+from src.models.torch_wrapper import OBNWrapper
+from src.models.keras_wrapper import CNNWrapper, DNNWrapper
 from src.models.grid_search import run
 
 """
@@ -23,15 +26,15 @@ kwargs = {
     # GENERAL PARAMS
     "n_val" : 365,
     "models" : (
-        [ChainSVRWrapper, {}],
-        [MultiSVRWrapper, {"n_cpus" : 1}],
+        #[ChainSVRWrapper, {}],
+        #[MultiSVRWrapper, {"n_cpus" : 1}],
+        [CNNWrapper, {"n_cpus" : os.cpu_count()}],
     ), 
     
     # GRID SEARCH PARAMS
     "restart" : False,
-    "n_combis" : 1,
-    "n_rep" : 1,
-    "n_cpus" : 8,
+    "n_combis" : 2,
+    "n_rep" : 5,
     "fast" : True,
 }
 run(**kwargs)

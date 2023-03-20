@@ -1,5 +1,7 @@
 import torch, numpy as np
 
+#def Initializer_from_string(s):
+    
 class Initializer(object):
     """
     Contains parameters necessary for calling the right init function in the last
@@ -42,8 +44,17 @@ class Initializer(object):
         """
         if transformer.scaling != '':
             self.p1 = 0
-            self.p2 = 1       
-            
+            self.p2 = 1
+
+    def __str__(self):        
+        s = "Initializer("
+        if self.fname == "normal":
+            fnamestr = "N("
+        if self.fname == "uniform":
+            fnamestr = "U("
+        s += f"{fnamestr}{self.p1}, {self.p2}))"
+        return s
+        
 class BiasInitializer(Initializer):
     """
     Initialize the bias for OB price forecasting layers. The first element will 
@@ -76,7 +87,7 @@ class BiasInitializer(Initializer):
         Update this object using the given pmin and pmax. They will be set to the
         attributes p1 and p2 respectively.        
         """
-
+        
         # New data distribution is mean = 0, std = 1!!
         if transformer.scaling != '':
             self.p1 = 0
@@ -86,3 +97,12 @@ class BiasInitializer(Initializer):
                 self.pmin * np.ones((1, transformer.n_features_))).min()
             self.pmax = transformer.transform(
                 self.pmax * np.ones((1, transformer.n_features_))).max()        
+
+    def __str__(self):        
+        s = "BiasInitializer("
+        if self.fname == "normal":
+            fnamestr = "N("
+        if self.fname == "uniform":
+            fnamestr = "U("
+        s += f"{fnamestr}{self.p1}, {self.p2}), ({self.pmin}, {self.pmax}))"
+        return s    

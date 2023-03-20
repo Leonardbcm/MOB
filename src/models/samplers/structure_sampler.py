@@ -56,7 +56,8 @@ class double_structure_sampler(rv_continuous):
         for i in range(size):
             sampled = self.distributions[0].rvs(random_state=random_state)[0]
             if self.different:
-                second_sampled = self.distributions[1].rvs(random_state=random_state)[0]
+                second_sampled = self.distributions[1].rvs(
+                    random_state=random_state)[0]
             else:
                 second_sampled = sampled
 

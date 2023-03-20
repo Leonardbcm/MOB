@@ -27,6 +27,7 @@
 %aimport src.models.samplers.regularization_sampler
 %aimport src.models.samplers.cnn_structure_sampler
 %aimport src.models.samplers.discrete_log_uniform
+%aimport src.models.samplers.obn_structure_sampler
 
 %aimport src.euphemia.orders
 %aimport src.euphemia.order_books

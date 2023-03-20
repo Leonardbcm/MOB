@@ -58,7 +58,6 @@ def flatten_param_list(param_list):
                     param_list[i][k2] = psample[k][k2]
                 del param_list[i][k]
     
-
 def get_seeds(n_combis):
     return [90125 + i for i in range(n_combis)]
 

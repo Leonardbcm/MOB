@@ -49,7 +49,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         
         # Used to transform the upper and lower bound!
         self.transformer = model_["transformer"]
-        self.OB_weight_initializers = model_["OB_weight_initializers"]    
+        self.weight_initializers = model_["weight_initializers"]    
         self.scale = model_["scale"]
 
         # Parallelization params
@@ -162,7 +162,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
                               self.N_OUTPUT, self.k, self.batch_solve, self.niter,
                               self.pmin, self.pmax, self.step, self.mV,
                               self.check_data, self.transformer,
-                              self.scale, self.OB_weight_initializers)
+                              self.scale, self.weight_initializers)
     
     ######################## DATA FORMATING
     def prepare_for_train(self, X, y):

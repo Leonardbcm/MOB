@@ -99,7 +99,6 @@ class NeuralNetWrapper(ModelWrapper):
         return regr
     
     def predict_test(self, regr, X):
-        K.clear_session()
         return self.predict_test_(regr, X)
 
 class DNNWrapper(NeuralNetWrapper):
@@ -115,14 +114,10 @@ class DNNWrapper(NeuralNetWrapper):
     def params(self):
         orig = NeuralNetWrapper.params(self)
         orig.update()
-        return orig
-
-    def map_dict(self):
-        orig = NeuralNetWrapper.map_dict(self)
-        orig.update({})
-        return orig       
+        return orig     
 
     def make(self, ptemp):
+        K.clear_session()        
         scaler, transformer, ptemp_ = self.prepare_for_make(ptemp)
             
         model = DNN("test", ptemp_)
@@ -175,7 +170,12 @@ class DNNWrapper(NeuralNetWrapper):
         if fast:
             space["n_epochs"] = [2]
             space["early_stopping"] = [""]
-        return space 
+        return space
+
+    def map_dict(self):
+        orig = NeuralNetWrapper.map_dict(self)
+        orig.update({})
+        return orig      
 
 
 class CNNWrapper(NeuralNetWrapper):
@@ -230,27 +230,9 @@ class CNNWrapper(NeuralNetWrapper):
                 params.pop("acc")
                    
         return params
-            
 
-    def map_dict(self):
-        orig = NeuralNetWrapper.map_dict(self)
-        orig.update({"structure" :
-                     {
-                         "filter_size" : (mu.filter_size_to_string,
-                                          mu.filter_size_from_string),
-                         "dilation_rate" : (mu.dilation_rate_to_string,
-                                            mu.dilation_rate_from_string),
-                         "kernel_size" : (mu.dilation_rate_to_string,
-                                          mu.dilation_rate_from_string),
-                         "pool_size" : (mu.dilation_rate_to_string,
-                                        mu.dilation_rate_from_string),
-                         "strides" : (mu.neurons_per_layer_to_string,
-                                      mu.neurons_per_layer_from_string),
-                     }                    
-        })
-        return orig
-
-    def make(self, ptemp):
+    def make(self, ptemp): 
+        K.clear_session()       
         scaler, transformer, ptemp_ = self.prepare_for_make(ptemp)
         
         model = CNN("", ptemp_, self.W, self.H)
@@ -352,6 +334,24 @@ class CNNWrapper(NeuralNetWrapper):
             space["n_epochs"] = [2]
             space["early_stopping"] = [""]    
         return space
+
+    def map_dict(self):
+        orig = NeuralNetWrapper.map_dict(self)
+        orig.update({"structure" :
+                     {
+                         "filter_size" : (mu.filter_size_to_string,
+                                          mu.filter_size_from_string),
+                         "dilation_rate" : (mu.dilation_rate_to_string,
+                                            mu.dilation_rate_from_string),
+                         "kernel_size" : (mu.dilation_rate_to_string,
+                                          mu.dilation_rate_from_string),
+                         "pool_size" : (mu.dilation_rate_to_string,
+                                        mu.dilation_rate_from_string),
+                         "strides" : (mu.neurons_per_layer_to_string,
+                                      mu.neurons_per_layer_from_string),
+                     }                    
+        })
+        return orig    
 
     def string(self):
         return "CNN"
