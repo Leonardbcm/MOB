@@ -13,12 +13,18 @@ This script performs the hyper-parameter grid search for the SVR.
 The sampling strategies and search spaces are defined each model wrapper's file.
 This will overwrite files in data/Grid Search, copy them or set restart = FALSE.
 
-We obtained our results using XXh per model on a XXcpu machine. 
-To run it faster, lower the number of hyperparameter combinations to try 
-'n_combi' or direclty re-use our grid search results.
+You can specify a number of cpus for parallelizing the configuration trainings. 
+However, some models already natively supports parallelizing training.
 
-Lower the number of cpus in case of high memory usage.
+ChainSVR works on single cpu, so you can parallelize configurations using all cpus
+MultiSVR by default uses all cpus, so don't parallelize configurations
+DNN and CNN training is not fully parallelized, so its possible to assign 
+configurations for each cpu. However, they can eat memory so its better to use only
+half the cpus for the configurations
+OBN training uses all cpus, so use only 1 cpu for configuration.
 """
+n_cpus = os.cpu_count()
+half_cpus = int(n_cpus/2)
 kwargs = {
     # TASKS
     "GRID_SEARCH" : True,
@@ -26,15 +32,17 @@ kwargs = {
     # GENERAL PARAMS
     "n_val" : 365,
     "models" : (
-        #[ChainSVRWrapper, {}],
+        #[ChainSVRWrapper, {"n_cpus" : n_cpus}],
         #[MultiSVRWrapper, {"n_cpus" : 1}],
-        [CNNWrapper, {"n_cpus" : 1}],
+        #[DNNWrapper, {"n_cpus" : half_cpus}],        
+        #[CNNWrapper, {"n_cpus" : half_cpus}],
+        [OBNWrapper, {"n_cpus" : 1}],        
     ), 
     
     # GRID SEARCH PARAMS
-    "restart" : False,
-    "n_combis" : 2,
-    "n_rep" : 2,
-    "fast" : False,
+    "restart" : True,
+    "n_combis" : 20,
+    "n_rep" : 5,
+    "fast" : True,
 }
 run(**kwargs)

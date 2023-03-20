@@ -206,30 +206,7 @@ class CNNWrapper(NeuralNetWrapper):
              "neurons_per_layer" : (),
         })
         return orig
-
-    def best_params(self, df, for_recalibration=False, acc=False,
-                    filters={}, inverted_filters={}, recompute=True):        
-        df = self.filter_results(copy.deepcopy(df), filters, inverted_filters)
-
-        # Use this specific config for recalibration : other configurations are too
-        # computiationally expensive...
-        best_row = df.seeds.argmax()
-        best_params = df.loc[best_row].to_dict()        
-        print(f"BEST MAE = {round(best_params['maes'], ndigits=2)}")            
-        
-        best_params.pop("file")            
-        best_params.pop("times")            
-        params = self.params()        
-        params.update(best_params)
-        if for_recalibration:
-            if "stop_after" in params.keys():
-                params["stop_after"] = -1
-            params.pop("maes")
-            if acc:
-                params.pop("acc")
-                   
-        return params
-
+    
     def make(self, ptemp): 
         K.clear_session()       
         scaler, transformer, ptemp_ = self.prepare_for_make(ptemp)

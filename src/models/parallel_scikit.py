@@ -26,7 +26,9 @@ def get_param_list_and_seeds(distributions, n_combis, model_wrapper=None,
     if not restart:
         previous = model_wrapper.load_results()
         n_tested = previous.shape[0]
-        print(f"ALREADY TESTED {n_tested} COMBIS")
+        best_so_far = model_wrapper.best_params(previous)
+        best_loss = round(best_so_far["maes"], ndigits=2)
+        print(f"ALREADY TESTED {n_tested} COMBIS; LOSS={best_loss}")
     else:
         n_tested = 0
         
@@ -154,7 +156,9 @@ def to_parallelize(i, model, param_list, X, y, n_combis, n_tested,
         
     if return_regr:
         return regr
-    
+    else:
+        del regr
+    tf.keras.backend.clear_session()
     return res, acc, times
 
 def parallelize(n_cpus, model, param_list, X, y, seeds=None, return_regr=False,
