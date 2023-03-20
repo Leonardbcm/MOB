@@ -1,10 +1,11 @@
-#%load aimport
-
 import os
+os.environ["CUDA_VISIBLE_DEVICES"]="-1"
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = "3" 
+#%load aimport
 
 from src.models.svr_wrapper import ChainSVRWrapper, MultiSVRWrapper
 from src.models.torch_wrapper import OBNWrapper
-from src.models.keras_wrapper import CNNWrapper, DNNWrapper
+from src.models.keras_wrapper import DNNWrapper, CNNWrapper
 from src.models.grid_search import run
 
 """
@@ -18,7 +19,6 @@ To run it faster, lower the number of hyperparameter combinations to try
 
 Lower the number of cpus in case of high memory usage.
 """
-
 kwargs = {
     # TASKS
     "GRID_SEARCH" : True,

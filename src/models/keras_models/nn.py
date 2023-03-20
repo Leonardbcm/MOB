@@ -59,24 +59,6 @@ class NeuralNetwork(BaseEstimator, RegressorMixin):
         # Spliter
         self.spliter = model_["spliter"]
 
-        # Parallelization params
-        self.n_cpus = model_["n_cpus"]        
-        if self.n_cpus == -1:
-            self.n_cpus_ = os.cpu_count()
-        else:
-            self.n_cpus_ = self.n_cpus
-
-        self.physical_devices = tf.config.list_physical_devices('CPU')
-        try:
-            tf.config.set_logical_device_configuration(
-                self.physical_devices[0],
-                [tf.config.LogicalDeviceConfiguration() for i in range(self.n_cpus_)])
-        except:
-            pass
-        self.logical_devices = tf.config.list_logical_devices()
-        assert len(self.logical_devices) == self.n_cpus_ 
-        self.strategy = tf.distribute.MirroredStrategy(self.logical_devices)
-
     def set_params(self, **parameters):
         for parameter, value in parameters.items():            
             setattr(self, parameter, value)
@@ -91,9 +73,9 @@ class NeuralNetwork(BaseEstimator, RegressorMixin):
         if self.shuffle_train:
             train_dataset  = train_dataset.shuffle(100)
             
-        train_dataset = train_dataset.batch(self.batch_size * self.n_cpus_)
+        train_dataset = train_dataset.batch(self.batch_size)
         validation_dataset = tf.data.Dataset.from_tensor_slices((Xv, yv)).batch(
-            self.batch_size * self.n_cpus_)
+            self.batch_size)
         
         self.model.fit(train_dataset,validation_data=validation_dataset, 
                        epochs=self.n_epochs, callbacks=self.callbacks,
@@ -237,13 +219,13 @@ class DNN(NeuralNetwork):
         NeuralNetwork.__init__(self, name, model_)
 
     def create_network(self, input_shape=None):
-        with self.strategy.scope():
-            model = tf.keras.Sequential()
-            self.build_layers(model, input_shape=input_shape)
-            model.compile(
-                optimizer=getattr(optimizers, self.optimizer)(),
-                metrics=[getattr(metrics, metric) for metric in self.metrics],
-                loss=getattr(losses, self.loss)(), run_eagerly=True)
+        tf.keras.backend.clear_session()        
+        model = tf.keras.Sequential()
+        self.build_layers(model, input_shape=input_shape)
+        model.compile(
+            optimizer=getattr(optimizers, self.optimizer)(),
+            metrics=[getattr(metrics, metric) for metric in self.metrics],
+            loss=getattr(losses, self.loss)(), run_eagerly=True)
         return model
 
 class CNN(NeuralNetwork):
@@ -288,9 +270,9 @@ class CNN(NeuralNetwork):
 
         ####### Evaluate the number of neurons in the flatten layer
         flatten = model.get_layer("flatten")
-        nout = np.array(self.get_layer("dense").weights[0].shape).prod()
+        nout = np.array(model.get_layer("dense").weights[0].shape).prod()
         if nout > 1000:
-            s=f"Configuration is big: the flattend layer has {nout} neurons!"
+            s=f"Configuration is big: the flattened layer has {nout} neurons!"
             print(s)
             #raise Exception(s)
         return model
@@ -316,13 +298,9 @@ class CNN(NeuralNetwork):
         (X, y, Xv, yv) = self.prepare_for_train(X, y)
         
         self.update_params(input_shape=X.shape[1:])
-        if self.use_multiprocessing:
-            print(f"Fitting with {self.n_workers_} cpus")
         self.model.fit(X, y, epochs=self.n_epochs, batch_size=self.batch_size,
                        callbacks=self.callbacks, validation_data=(Xv, yv),
-                       shuffle=self.shuffle_train, verbose=verbose,
-                       workers=self.n_workers_,
-                       use_multiprocessing=self.use_multiprocessing)
+                       shuffle=self.shuffle_train, verbose=verbose)
         return self
     
     def predict(self, X):

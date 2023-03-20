@@ -49,7 +49,6 @@ class SolvingNetwork(LightningModule):
         self.NN1 = torch.nn.Sequential(*nn_layers)
 
         self.in_obs = int(self.NN1_input[-1] / 24)
-
         ############## Construct the OrderBook forecaster if at least 1 layer
         OB_layers = []
         self.OB_out = self.in_obs
