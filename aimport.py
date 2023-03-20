@@ -18,6 +18,7 @@
 %aimport src.models.model_wrapper
 %aimport src.models.parallel_scikit
 %aimport src.models.scalers
+%aimport src.models.sign_layer
 %aimport src.models.spliter
 %aimport src.models.svr_wrapper
 %aimport src.models.torch_wrapper
@@ -28,6 +29,7 @@
 %aimport src.models.samplers.cnn_structure_sampler
 %aimport src.models.samplers.discrete_log_uniform
 %aimport src.models.samplers.obn_structure_sampler
+%aimport src.models.samplers.weight_initializer_samplers
 
 %aimport src.euphemia.orders
 %aimport src.euphemia.order_books

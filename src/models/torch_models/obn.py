@@ -42,6 +42,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         self.N_OUTPUT = model_["N_OUTPUT"]
         self.spliter = model_["spliter"]
         self.store_OBhat = model_["store_OBhat"]
+        self.store_val_OBhat = model_["store_val_OBhat"]        
         
         self.store_losses = model_["store_losses"]
         self.tensorboard = model_["tensorboard"]
@@ -59,7 +60,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         else:
             self.n_cpus_ = self.n_cpus
             
-        torch.set_num_threads(self.n_cpus)
+        torch.set_num_threads(self.n_cpus_)
 
     def set_params(self, **parameters):
         for parameter, value in parameters.items():            
@@ -79,9 +80,10 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         self.callbacks = []
         if self.store_losses:
             self.callbacks += [StoreLosses()]
-        if self.store_OBhat:
-            #self.callbacks += [StoreOBhat(self.store_OBhat)]
+        if self.store_val_OBhat:
             self.callbacks += [ValOBhat(self.store_OBhat)]
+        if self.store_OBhat:
+            self.callbacks += [StoreOBhat(self.store_OBhat)]
         self.early_stopping_callbacks()
     
     ###### METHODS FOR SKLEARN AND VOLTAIRE

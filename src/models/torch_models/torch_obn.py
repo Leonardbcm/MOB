@@ -2,8 +2,10 @@ import torch, time, numpy as np
 from pytorch_lightning import LightningModule
 from torch import nn
 
-from src.models.torch_models.scalers import TorchMinMaxScaler, TorchMinAbsScaler, TorchCliper
+from src.models.torch_models.scalers import TorchMinMaxScaler, TorchCliper
+from src.models.torch_models.sign_layer import SignLayer
 from src.models.torch_models.torch_solver import PFASolver, BatchPFASolver
+
 
 class SolvingNetwork(LightningModule):
     def __init__(self, din, NN1, OBs, OB_input, batch_norm, criterion, N_OUTPUT, k,
@@ -38,7 +40,28 @@ class SolvingNetwork(LightningModule):
         self.OB_weight_initializers = {
             "polayers" : self.weight_initializers,
             "poplayers" : self.weight_initializers}
+        self.criterion = criterion
+        self.criterion_ = getattr(nn, self.criterion)()        
 
+        # Update PMIN and PMAX according to the transformer
+        self.update_bounds()
+
+        # Construct network up until before the OB layers
+        self.construct_network()
+        
+        # Construct the scalers if specified
+        self.construct_scalers()
+
+        # Intialize the sign Layer
+        self.sign_layer = SignLayer(self.k)
+            
+        # Intialize the V, Po, P layers
+        self.construct_oblayers()
+                
+        # Create the solver
+        self.create_solver()
+
+    def construct_network(self):
         ################ Construct the feature extracter NN1
         nn_layers = []
         for (din, dout) in zip([self.din] + self.NN1_input[:-1], self.NN1_input):
@@ -63,9 +86,23 @@ class SolvingNetwork(LightningModule):
                 OB_layers.append(torch.nn.Linear(din, dout))
                 OB_layers.append(torch.nn.ReLU())
             
-        self.OB_layers = torch.nn.Sequential(*OB_layers)
-        
-        ############## Intialize the V, Po, P layers
+        self.OB_layers = torch.nn.Sequential(*OB_layers)        
+
+    def construct_scalers(self):
+        if self.scale == "MinMax":
+            self.Po_scaler = TorchMinMaxScaler(
+                a=self.pmin_scaled, b=self.pmax_scaled)
+            self.PoP_scaler = TorchMinMaxScaler(
+                a=self.pmin_scaled, b=self.pmax_scaled)
+        if self.scale == "Clip":
+            self.Po_scaler = TorchCliper(self.pmin_scaled, self.pmax_scaled)
+            self.PoP_scaler = TorchCliper(self.pmin_scaled, self.pmax_scaled,
+                                          max_frac=0.99, min_frac=0.99)
+        else:
+            self.Po_scaler = torch.nn.Identity()
+            self.PoP_scaler = torch.nn.Identity()
+
+    def construct_oblayers(self):
         containers = {"vlayers" : [], "polayers" : [], "poplayers" : []}       
         for container in containers.keys():
             c_layers = containers[container]
@@ -87,23 +124,18 @@ class SolvingNetwork(LightningModule):
             c_layers.append(forecast_layer)              
             
             seq = torch.nn.Sequential(*c_layers)
-            setattr(self, container, seq)
-                
-        ############## Create the solver with the correct bounds
-        self.create_solver()
+            setattr(self, container, seq)        
         
-        self.criterion = criterion
-        self.criterion_ = getattr(nn, self.criterion)()        
-
-    def create_solver(self):
-        ################# Construct the Solver
+    def update_bounds(self):
         # Compute the Scaled upper and lower bounds
         self.pmin_scaled = self.transformer.transform(
             self.pmin * np.ones((1, self.N_OUTPUT))).min()
         self.pmax_scaled = self.transformer.transform(
             self.pmax * np.ones((1, self.N_OUTPUT))).max()
-        self.step_scaled = (self.pmax_scaled - self.pmin_scaled) / ((self.pmin - self.pmax) / self.step)
+        self.step_scaled = (self.pmax_scaled - self.pmin_scaled) / ((self.pmin - self.pmax) / self.step)        
         
+    def create_solver(self):
+        ################# Construct the Solver        
         if not self.batch_solve:
             self.optim_layer = PFASolver(
                 pmin=self.pmin_scaled, pmax=self.pmax_scaled, step=self.step_scaled,
@@ -132,35 +164,28 @@ class SolvingNetwork(LightningModule):
         if return_parts == "step_1":
             return V, Po, PoP, P
         
-        ############## 2] Fit OB to the domain        
-        if self.scale == "MinMax":
-            Po = TorchMinMaxScaler(a=self.pmin_scaled, b=self.pmax_scaled)(Po)
-            PoP = TorchMinMaxScaler(a=self.pmin_scaled, b=self.pmax_scaled)(PoP)
-        if self.scale == "Clip":
-            Po = TorchCliper(self.pmin_scaled, self.pmax_scaled)(Po)
-            PoP = TorchCliper(self.pmin_scaled, self.pmax_scaled)(PoP)     
-                        
-        # Compute P
+        ############## 2] Fit OB to the domain
+        # a) Call the scaler, which are identity if no scalers where specified!
+        Po = self.Po_scaler(Po)
+        PoP = self.PoP_scaler(PoP)
+        
+        # b) Compute P
         P = PoP - Po
         if return_parts == "step_2":
             return V, Po, PoP, P          
-            
-        # Handle signs
-        Ss = torch.sigmoid(self.k * P)
-        signs = 2.0 * Ss - 1.0 + 4 * Ss * (1 - Ss)        
-        
-        # Ensure that V and P have the same sign
-        V = torch.abs(V) * signs
-        P = torch.abs(P) * signs
+    
+        # c) Handle signs
+        P, V = self.sign_layer(P, V)
 
+        # () Compute PoP for distribution analysis
         PoP = Po + P
         if return_parts == "step_3":
             return V, Po, PoP, P           
             
-        # Store the percentage of demand orders
+        # () Store the percentage of demand orders for analysis
         self.perc_neg = 100 * torch.mean(torch.where(P < 0, 1.0, 0.0))
 
-        # Reconstruct the OB        
+        # d) Reconstruct the OB        
         x = torch.cat([
             V.reshape(-1, self.OBs, 1),
             Po.reshape(-1, self.OBs, 1),

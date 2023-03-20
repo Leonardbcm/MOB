@@ -1,3 +1,4 @@
+from scipy import stats
 from sklearn.pipeline import make_pipeline
 from sklearn.compose import TransformedTargetRegressor
 
@@ -56,7 +57,8 @@ class OBNWrapper(TorchWrapper):
             "check_data" : False,
 
             # Log params
-            "store_OBhat" : False,            
+            "store_OBhat" : False,
+            "store_val_OBhat" : False,
             "store_losses" : False,
             "tensorboard" : "",
             
@@ -112,6 +114,11 @@ class OBNWrapper(TorchWrapper):
                 ],
                 weights = [4, 1, 2, 3]
             ),
+            "batch_norm" : stats.bernoulli(0.5),
+            "batch_size" : discrete_loguniform(10, n+1),            
+            "scaler" : ["BCM", "Standard", "Median", "SinMedian"],
+            "transformer" : ["BCM", "Standard", "Median", "SinMedian", ""],
+            "stop_after" : [stop_after],            
         }
         if fast:
             space["n_epochs"] = [2]
@@ -119,7 +126,7 @@ class OBNWrapper(TorchWrapper):
         return space
 
     def map_dict(self):
-        orig = NeuralNetWrapper.map_dict(self)
+        orig = TorchWrapper.map_dict(self)
         orig.update({"structure" :
                      {
                          "OBN" : (mu.neurons_per_layer_to_string,
@@ -145,9 +152,5 @@ class OBNWrapper(TorchWrapper):
         
         model.refit(scaler.transform(X), y, epochs=epochs)
 
-    def get_search_space(self, country, version=None,  n=None, fast=False,
-                         stop_after=-1):
-        return OBN_space(n, country, fast=fast, stop_after=stop_after)        
-    
     def string(self):
         return "OBN"

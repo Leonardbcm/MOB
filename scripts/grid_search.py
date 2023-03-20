@@ -28,13 +28,13 @@ kwargs = {
     "models" : (
         #[ChainSVRWrapper, {}],
         #[MultiSVRWrapper, {"n_cpus" : 1}],
-        [CNNWrapper, {"n_cpus" : os.cpu_count()}],
+        [CNNWrapper, {"n_cpus" : 1}],
     ), 
     
     # GRID SEARCH PARAMS
     "restart" : False,
-    "n_combis" : 50,
-    "n_rep" : 4,
+    "n_combis" : 2,
+    "n_rep" : 2,
     "fast" : False,
 }
 run(**kwargs)

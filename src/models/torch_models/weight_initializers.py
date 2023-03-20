@@ -1,6 +1,67 @@
 import torch, numpy as np
 
-#def Initializer_from_string(s):
+def initializers_from_string(s):
+    """
+    Receives either:
+    s = '[]'
+    s = ['Initializer(N(mu, sigma))']
+    s = ['BiasInitializer(N(mu, sigma), pmin, pmax)']
+    s = ['Initializer(N(mu, sigma))', 'BiasInitializer(N(mu, sigma), pmin, pmax)']
+
+    Parse and return the object(s)
+    """
+    if s == '[]':
+        return []
+
+    s = s[1:-1]
+    if len(s.split('Initializer')) == 2:
+        if len(s.split('BiasInitializer')) == 2:
+            return [BiasInitializer_from_string(s), ]
+        else:
+            return [Initializer_from_string(s), ]
+    else:
+        _, init, bias = s.split('Initializer')
+        init_s = 'Initializer' + init.split("', 'Bias")[0]
+        bias_s = 'BiasInitializer' + bias[:-1]
+        return [Initializer_from_string(init_s),
+                BiasInitializer_from_string(bias_s)]
+
+def Initializer_from_string(s):
+    """
+    Receives  s = 'Initializer(N(mu, sigma))'
+    parse the string and returns an Initializer object.
+    """
+    data = s[:-1].split('Initializer(')[1]
+    
+    distribution = data[0]
+    data = data[2:-1]
+    p1, p2 = data.split(", ")
+
+    if distribution=="N":
+        dstring = "normal"
+    if distribution=="U":
+        dstring = "uniform"
+
+    return Initializer(dstring, "weight", p1, p2)    
+
+def BiasInitializer_from_string(s):
+    """
+    Receives  s = 'BiasInitializer(N(mu, sigma), pmin, pmax)'
+    parse the string and returns a BiasInitializer object.
+    """
+    data = s[:-1].split('BiasInitializer(')[1]
+    
+    distribution = data[0]
+    data = data[2:]
+    p1, p2, pmin, pmax = data.split(", ")
+    p2 = p2[:-1]
+    
+    if distribution=="N":
+        dstring = "normal"
+    if distribution=="U":
+        dstring = "uniform"
+
+    return BiasInitializer(dstring, p1, p2, pmin, pmax)        
     
 class Initializer(object):
     """
@@ -104,5 +165,5 @@ class BiasInitializer(Initializer):
             fnamestr = "N("
         if self.fname == "uniform":
             fnamestr = "U("
-        s += f"{fnamestr}{self.p1}, {self.p2}), ({self.pmin}, {self.pmax}))"
+        s += f"{fnamestr}{self.p1}, {self.p2}), {self.pmin}, {self.pmax})"
         return s    

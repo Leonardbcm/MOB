@@ -10,7 +10,7 @@ from src.euphemia.ploters import *
 from src.models.spliter import MySpliter
 from src.models.torch_wrapper import OBNWrapper
 from src.models.torch_models.weight_initializers import *
-from src.models.parallel_scikit import set_all_seeds
+import src.models.parallel_scikit as ps
 
 ############## Construct model wrapper and load data
 spliter = MySpliter(365, shuffle=False)
@@ -35,7 +35,7 @@ regr = model_wrapper.make(ptemp)
 (Xt, Yt), (Xv, Yv) = model_wrapper.spliter(X, Y)
 
 ############## Fit model and predict validation set
-set_all_seeds(0)
+ps.set_all_seeds(0)
 regr.fit(X, Y)
 yhat = model_wrapper.predict_val(regr, Xv)
 mean_absolute_error(Yv, yhat)

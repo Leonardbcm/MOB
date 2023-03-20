@@ -1,8 +1,5 @@
-import numpy as np, copy, torch, warnings
-from scipy import stats
+import torch
 from torch import nn
-
-from src.models.model_utils import flatten_dict
 
 class TorchMinMaxScaler(nn.Module):
     """
@@ -54,17 +51,17 @@ class TorchCliper(nn.Module):
     """
     Clip data in the followinf interval [a, b]
     """
-    def __init__(self, a, b, dtype=torch.float32):
-        nn.Module.__init__(self)        
-        self.a = a
-        self.b = b
+    def __init__(self, a, b, min_frac=1.0, max_frac=1.0, dtype=torch.float32):
+        nn.Module.__init__(self)
+        self.a = a * min_frac
+        self.b = b * max_frac
         self.dtype = dtype
 
     def forward(self, x):
         xout = torch.clip(x, min=self.a, max=self.b)
         return xout
 
-
+    
 class AbsCliper(nn.Module):
     """
     Clip data so that the min absolute value of the data is higher
