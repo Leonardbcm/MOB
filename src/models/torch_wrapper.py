@@ -78,10 +78,6 @@ class OBNWrapper(TorchWrapper):
         pipe = make_pipeline(scaler, model)
         return pipe
 
-    def get_search_space(self, country, version=None,  n=None, fast=False,
-                         stop_after=-1):
-        return OBN_space(n, country, fast=fast, stop_after=stop_after)
-
     def predict_order_books(self, regr, X):
         model = regr.steps[1][1]
         scaler = regr.steps[0][1]
@@ -93,7 +89,11 @@ class OBNWrapper(TorchWrapper):
         model = regr.steps[1][1]
         scaler = regr.steps[0][1]
         
-        model.refit(scaler.transform(X), y, epochs=epochs)                
+        model.refit(scaler.transform(X), y, epochs=epochs)
+
+    def get_search_space(self, country, version=None,  n=None, fast=False,
+                         stop_after=-1):
+        return OBN_space(n, country, fast=fast, stop_after=stop_after)        
     
     def string(self):
         return "OBN"

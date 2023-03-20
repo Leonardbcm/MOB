@@ -58,6 +58,8 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
             self.n_cpus_ = os.cpu_count()
         else:
             self.n_cpus_ = self.n_cpus
+            
+        torch.set_num_threads(self.n_cpus)
 
     def set_params(self, **parameters):
         for parameter, value in parameters.items():            

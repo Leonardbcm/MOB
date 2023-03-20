@@ -66,7 +66,6 @@ class NeuralNetWrapper(ModelWrapper):
             "transformer" : "Standard",
 
             "spliter" : self.spliter,
-            "n_cpus" : -1,
         }
 
     def map_dict(self):

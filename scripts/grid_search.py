@@ -1,7 +1,11 @@
-%load aimport
+import os
+os.environ["CUDA_VISIBLE_DEVICES"]="-1"
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = "3" 
+#%load aimport
 
 from src.models.svr_wrapper import ChainSVRWrapper, MultiSVRWrapper
-from src.models.obn_wrapper import OBNWrapper
+from src.models.torch_wrapper import OBNWrapper
+from src.models.keras_wrapper import DNNWrapper, CNNWrapper
 from src.models.grid_search import run
 
 """
@@ -15,7 +19,6 @@ To run it faster, lower the number of hyperparameter combinations to try
 
 Lower the number of cpus in case of high memory usage.
 """
-
 kwargs = {
     # TASKS
     "GRID_SEARCH" : True,
@@ -23,15 +26,16 @@ kwargs = {
     # GENERAL PARAMS
     "n_val" : 365,
     "models" : (
-        [ChainSVRWrapper, {}],
-        [MultiSVRWrapper, {"n_cpus" : 1}],
+        #[ChainSVRWrapper, {"n_cpus" : os.cpu_count()}],
+        #[MultiSVRWrapper, {}],
+        #[DNNWrapper, {"n_cpus" : os.cpu_count()}],
+        [CNNWrapper, {"n_cpus" : os.cpu_count()}],        
     ), 
     
     # GRID SEARCH PARAMS
     "restart" : False,
-    "n_combis" : 1,
-    "n_rep" : 1,
-    "n_cpus" : 8,
-    "fast" : True,
+    "n_combis" : 20,
+    "n_rep" : 20,
+    "fast" : False,
 }
 run(**kwargs)

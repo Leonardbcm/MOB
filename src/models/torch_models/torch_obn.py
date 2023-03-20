@@ -46,7 +46,6 @@ class SolvingNetwork(LightningModule):
         self.NN1 = torch.nn.Sequential(*nn_layers)
 
         self.in_obs = int(self.NN1_input[-1] / 24)
-
         ############## Construct the OrderBook forecaster
         OB_layers = []
         for (din, dout) in zip([self.in_obs] + self.OB_input[:-1], self.OB_input):
