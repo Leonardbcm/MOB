@@ -107,6 +107,8 @@ def to_parallelize(i, model, param_list, X, y, n_combis, n_tested,
     evaluate the configuration. Xv and yv are ignored and the model's splitter 
     must be defined.
     """
+    tf.keras.backend.clear_session()
+    
     simplefilter("ignore", category=ConvergenceWarning)
     current = n_tested + i
     if verbose or (current % 500) == 499:
