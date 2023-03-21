@@ -5,6 +5,7 @@
 .\#*
 
 pyvenv.cfg
+import_results.sh
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
