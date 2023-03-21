@@ -5,6 +5,7 @@
 %aimport src.models.torch_models.ob_datasets
 %aimport src.models.torch_models.obn
 %aimport src.models.torch_models.scalers
+%aimport src.models.torch_models.sign_layer
 %aimport src.models.torch_models.weight_initializers
 %aimport src.models.torch_models.torch_obn
 %aimport src.models.torch_models.torch_solver
@@ -18,7 +19,6 @@
 %aimport src.models.model_wrapper
 %aimport src.models.parallel_scikit
 %aimport src.models.scalers
-%aimport src.models.sign_layer
 %aimport src.models.spliter
 %aimport src.models.svr_wrapper
 %aimport src.models.torch_wrapper

@@ -62,14 +62,29 @@ p32 = {
     "scale" : "Clip",
     "OB_weight_initializers" : [BiasInitializer("normal", 30, 40, -500, 3000), ],
 }
+
+# Apply the sign coercion for the volumes on top of weight init
+p41 = {
+    "store_val_OBhat" : os.path.join(model_wrapper.folder(), "Forecasts", "P41"),
+    "transformer" : "",
+    "scale" : "Clip-Sign",
+    "OB_weight_initializers" : [BiasInitializer("normal", 30, 40, -500, 3000), ],
+}
+
+# Layer weight init should also match the label transformation!
+p42 = {
+    "store_val_OBhat" : os.path.join(model_wrapper.folder(), "Forecasts", "P42"),
+    "transformer" : "Standard",
+    "scale" : "Clip-Sign",
+    "OB_weight_initializers" : [BiasInitializer("normal", 30, 40, -500, 3000), ],
+}
 #################### Check XP settings
 save_path = os.path.join(model_wrapper.folder(), "Forecasts")
 params = copy.deepcopy(ptemp)
-params["n_epochs"] = 100
-params["store_val_OBhat"] = True
+params["n_epochs"] = 1000
 regrs = {}
-for parameters, name in zip([p11, p12, p21, p22, p31, p32],
-                            ["P11", "P12", "P21", "P22", "P31", "P32"]):
+for parameters, name in zip([p11, p12, p21, p22, p31, p32, p41, p42],
+                            ["P11", "P12", "P21", "P22", "P31", "P32","P41","P42"]):
     param_temps = copy.deepcopy(params)
     param_temps.update(parameters)
     
@@ -88,8 +103,8 @@ for parameters, name in zip([p11, p12, p21, p22, p31, p32],
 
 maes = {}
 ploters = {}
-for parameters, name in zip([p11, p12, p21, p22, p31, p32],
-                            ["P11", "P12", "P21", "P22", "P31", "P32"]):
+for parameters, name in zip([p11, p12, p21, p22, p31, p32, p41, p42],
+                            ["P11", "P12", "P21", "P22", "P31", "P32","P41","P42"]):
     param_temps = copy.deepcopy(params)
     param_temps.update(parameters)    
     
@@ -145,8 +160,8 @@ params["n_epochs"] = 1000
 params["store_val_OBhat"] = False
 ploters = {}
 regrs = {}
-for parameters, name in zip([p12, p31, p32],
-                            ["P12",  "P31", "P32"]):
+for parameters, name in  zip([p11, p12, p21, p22, p31, p32, p41, p42],
+                            ["P11", "P12", "P21", "P22", "P31", "P32","P41","P42"]):
     param_temps = copy.deepcopy(params)
     param_temps.update(parameters)
     
@@ -164,8 +179,8 @@ for parameters, name in zip([p12, p31, p32],
     np.save(os.path.join(save_path, name, "full_OBvhat.npy"), OBhat)
 
 maes = {}
-for parameters, name in zip([p12, p31, p32],
-                            ["P12", "P31", "P32"]):
+for parameters, name in  zip([p11, p12, p21, p22, p31, p32, p41, p42],
+                            ["P11", "P12", "P21", "P22", "P31", "P32","P41","P42"]):
     param_temps = copy.deepcopy(params)
     param_temps.update(parameters)    
     

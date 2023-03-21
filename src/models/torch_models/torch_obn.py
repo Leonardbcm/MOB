@@ -53,7 +53,7 @@ class SolvingNetwork(LightningModule):
         self.construct_scalers()
 
         # Intialize the sign Layer
-        self.sign_layer = SignLayer(self.k)
+        self.sign_layer = SignLayer(self.k, self.scale)
             
         # Intialize the V, Po, P layers
         self.construct_oblayers()
@@ -96,8 +96,11 @@ class SolvingNetwork(LightningModule):
                 a=self.pmin_scaled, b=self.pmax_scaled)
         if self.scale == "Clip":
             self.Po_scaler = TorchCliper(self.pmin_scaled, self.pmax_scaled)
+            self.PoP_scaler = TorchCliper(self.pmin_scaled, self.pmax_scaled)
+        if self.scale == "Clip-Sign":
+            self.Po_scaler = TorchCliper(self.pmin_scaled, self.pmax_scaled)
             self.PoP_scaler = TorchCliper(self.pmin_scaled, self.pmax_scaled,
-                                          max_frac=0.99, min_frac=0.99)
+                                          max_frac=0.99, min_frac=0.99)            
         else:
             self.Po_scaler = torch.nn.Identity()
             self.PoP_scaler = torch.nn.Identity()

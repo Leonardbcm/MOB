@@ -81,7 +81,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         if self.store_losses:
             self.callbacks += [StoreLosses()]
         if self.store_val_OBhat:
-            self.callbacks += [ValOBhat(self.store_OBhat)]
+            self.callbacks += [ValOBhat(self.store_val_OBhat)]
         if self.store_OBhat:
             self.callbacks += [StoreOBhat(self.store_OBhat)]
         self.early_stopping_callbacks()

@@ -11,12 +11,13 @@ class SignLayer(nn.Module):
     If P < 0, V < 0
     If P = 0, V does not changes
     """
-    def __init__(self, k, dtype=torch.float32):
+    def __init__(self, k, scale, dtype=torch.float32):
         nn.Module.__init__(self)
         self.dtype = dtype
         self.k = k
+        self.scale = scale
 
-    def forward(self, P, V):    
+    def forward_clip_sign(self, P, V):
         # a) Compute sigmoids
         Sp = torch.sigmoid(self.k * P)
         Sv = torch.sigmoid(self.k * V)
@@ -35,6 +36,24 @@ class SignLayer(nn.Module):
 
         return P, V
 
+    def forward_(self, P, V):
+        # a) Compute sigmoids
+        Sp = torch.sigmoid(self.k * P)
+
+        # b) Compute signs
+        self.signs_P = 2.0 * Sp - 1.0 + 4 * Sp * (1 - Sp)   
+
+        # c) Apply signs
+        V = torch.abs(V) * self.signs_P
+        P = torch.abs(P) * self.signs_P
+
+        return P, V
+
+    def forward(self, P, V):
+        if self.scale == "Clip-Sign":
+            return self.forward_clip_sign(P, V)
+        else:
+            return self.forward_(P, V)         
 
 if __name__ == "__main__":
     def signs(P, V):
