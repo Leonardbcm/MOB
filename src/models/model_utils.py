@@ -1,6 +1,6 @@
 import os, pandas, copy, ast, numpy as np
 from ast import literal_eval as make_tuple
-
+from src.models.torch_models.weight_initializers import initializers_from_string
 import src.models.spliter as SPL
 
 def base_folder():
@@ -210,6 +210,12 @@ def dilation_rate_to_string(dr):
 
 def dilation_rate_from_string(res):
     return make_tuple(res)
+
+def weight_initializer_to_string(wi):
+    return [str(w) for w in wi]
+
+def weight_initializer_from_string(res):
+    return initializers_from_string(res)
 
 def activity_regularizer_to_string(activity_regularizer):
     if activity_regularizer is not None:

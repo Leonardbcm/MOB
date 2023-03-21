@@ -42,6 +42,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         self.N_OUTPUT = model_["N_OUTPUT"]
         self.spliter = model_["spliter"]
         self.store_OBhat = model_["store_OBhat"]
+        self.store_val_OBhat = model_["store_val_OBhat"]        
         
         self.store_losses = model_["store_losses"]
         self.tensorboard = model_["tensorboard"]
@@ -49,7 +50,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         
         # Used to transform the upper and lower bound!
         self.transformer = model_["transformer"]
-        self.OB_weight_initializers = model_["OB_weight_initializers"]    
+        self.weight_initializers = model_["weight_initializers"]    
         self.scale = model_["scale"]
 
         # Parallelization params
@@ -58,6 +59,8 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
             self.n_cpus_ = os.cpu_count()
         else:
             self.n_cpus_ = self.n_cpus
+            
+        torch.set_num_threads(self.n_cpus_)
 
     def set_params(self, **parameters):
         for parameter, value in parameters.items():            
@@ -77,9 +80,10 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         self.callbacks = []
         if self.store_losses:
             self.callbacks += [StoreLosses()]
+        if self.store_val_OBhat:
+            self.callbacks += [ValOBhat(self.store_val_OBhat)]
         if self.store_OBhat:
-            #self.callbacks += [StoreOBhat(self.store_OBhat)]
-            self.callbacks += [ValOBhat(self.store_OBhat)]
+            self.callbacks += [StoreOBhat(self.store_OBhat)]
         self.early_stopping_callbacks()
     
     ###### METHODS FOR SKLEARN
@@ -162,7 +166,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
                               self.N_OUTPUT, self.k, self.batch_solve, self.niter,
                               self.pmin, self.pmax, self.step, self.mV,
                               self.check_data, self.transformer,
-                              self.scale, self.OB_weight_initializers)
+                              self.scale, self.weight_initializers)
     
     ######################## DATA FORMATING
     def prepare_for_train(self, X, y):

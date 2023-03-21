@@ -103,7 +103,7 @@ def run(**kwargs):
     inverted_filters = kwargs["inverted_filters"]
     recompute = kwargs["recompute"]     
     
-    ## Walk through 1) datasets 2) countries 3) models
+    ## Walk through 1) datasets 2) countries 3) models 4) repetitions
     recalibration_times = pandas.DataFrame(columns=["country", "model", "times"])
     restart_changed = False
     for (dataset, base_dataset_name) in zip(datasets, base_dataset_names):

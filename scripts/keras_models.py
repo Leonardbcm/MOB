@@ -11,13 +11,13 @@ import src.models.parallel_scikit as ps
 spliter = MySpliter(365, shuffle=False)
 model_wrapper = DNNWrapper("TEST", "Lyon", spliter=spliter)
 X, Y = model_wrapper.load_train_dataset()
+(Xt, Yt), (Xv, Yv) = model_wrapper.spliter(X, Y)
 
 # Use default params to isntantiate a model
 ptemp = model_wrapper.params()
-ptemp["n_epochs"] = 10
+ptemp["n_epochs"] = 1000
 ptemp["batch_size"] = 300
 regr = model_wrapper.make(ptemp)
-(Xt, Yt), (Xv, Yv) = model_wrapper.spliter(X, Y)
 
 # Fit the model and compute the error
 ps.set_all_seeds(0)
@@ -32,7 +32,6 @@ search_space = model_wrapper.get_search_space(n=X.shape[0])
 
 # Fit the model and compute the error using this configuration
 regr = model_wrapper.make(model_wrapper._params(ptemp))
-(Xt, Yt), (Xv, Yv) = model_wrapper.spliter(X, Y)
 ps.set_all_seeds(seed)
 regr.fit(X, Y)
 yhat = model_wrapper.predict_val(regr, Xv)
@@ -47,10 +46,9 @@ X, Y = model_wrapper.load_train_dataset()
 # Use default params to isntantiate a model
 ptemp = model_wrapper.params()
 regr = model_wrapper.make(ptemp)
-(Xt, Yt), (Xv, Yv) = model_wrapper.spliter(X, Y)
 
 # Fit the model and compute the error
-set_all_seeds(0)
+ps.set_all_seeds(0)
 regr.fit(X, Y)
 yhat = model_wrapper.predict_val(regr, Xv)
 mean_absolute_error(Yv, yhat)
@@ -62,8 +60,7 @@ search_space = model_wrapper.get_search_space(n=X.shape[0])
 
 # Fit the model and compute the error using this configuration
 regr = model_wrapper.make(model_wrapper._params(ptemp))
-(Xt, Yt), (Xv, Yv) = model_wrapper.spliter(X, Y)
-set_all_seeds(seed)
+ps.set_all_seeds(seed)
 regr.fit(X, Y)
 yhat = model_wrapper.predict_val(regr, Xv)
 mean_absolute_error(Yv, yhat)

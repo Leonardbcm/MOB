@@ -66,7 +66,6 @@ class NeuralNetWrapper(ModelWrapper):
             "transformer" : "Standard",
 
             "spliter" : self.spliter,
-            "n_cpus" : -1,
         }
 
     def map_dict(self):
@@ -99,7 +98,6 @@ class NeuralNetWrapper(ModelWrapper):
         return regr
     
     def predict_test(self, regr, X):
-        K.clear_session()
         return self.predict_test_(regr, X)
 
 class DNNWrapper(NeuralNetWrapper):
@@ -115,14 +113,10 @@ class DNNWrapper(NeuralNetWrapper):
     def params(self):
         orig = NeuralNetWrapper.params(self)
         orig.update()
-        return orig
-
-    def map_dict(self):
-        orig = NeuralNetWrapper.map_dict(self)
-        orig.update({})
-        return orig       
+        return orig     
 
     def make(self, ptemp):
+        K.clear_session()        
         scaler, transformer, ptemp_ = self.prepare_for_make(ptemp)
             
         model = DNN("test", ptemp_)
@@ -175,7 +169,12 @@ class DNNWrapper(NeuralNetWrapper):
         if fast:
             space["n_epochs"] = [2]
             space["early_stopping"] = [""]
-        return space 
+        return space
+
+    def map_dict(self):
+        orig = NeuralNetWrapper.map_dict(self)
+        orig.update({})
+        return orig      
 
 
 class CNNWrapper(NeuralNetWrapper):
@@ -207,50 +206,9 @@ class CNNWrapper(NeuralNetWrapper):
              "neurons_per_layer" : (),
         })
         return orig
-
-    def best_params(self, df, for_recalibration=False, acc=False,
-                    filters={}, inverted_filters={}, recompute=True):        
-        df = self.filter_results(copy.deepcopy(df), filters, inverted_filters)
-
-        # Use this specific config for recalibration : other configurations are too
-        # computiationally expensive...
-        best_row = df.seeds.argmax()
-        best_params = df.loc[best_row].to_dict()        
-        print(f"BEST MAE = {round(best_params['maes'], ndigits=2)}")            
-        
-        best_params.pop("file")            
-        best_params.pop("times")            
-        params = self.params()        
-        params.update(best_params)
-        if for_recalibration:
-            if "stop_after" in params.keys():
-                params["stop_after"] = -1
-            params.pop("maes")
-            if acc:
-                params.pop("acc")
-                   
-        return params
-            
-
-    def map_dict(self):
-        orig = NeuralNetWrapper.map_dict(self)
-        orig.update({"structure" :
-                     {
-                         "filter_size" : (mu.filter_size_to_string,
-                                          mu.filter_size_from_string),
-                         "dilation_rate" : (mu.dilation_rate_to_string,
-                                            mu.dilation_rate_from_string),
-                         "kernel_size" : (mu.dilation_rate_to_string,
-                                          mu.dilation_rate_from_string),
-                         "pool_size" : (mu.dilation_rate_to_string,
-                                        mu.dilation_rate_from_string),
-                         "strides" : (mu.neurons_per_layer_to_string,
-                                      mu.neurons_per_layer_from_string),
-                     }                    
-        })
-        return orig
-
-    def make(self, ptemp):
+    
+    def make(self, ptemp): 
+        K.clear_session()       
         scaler, transformer, ptemp_ = self.prepare_for_make(ptemp)
         
         model = CNN("", ptemp_, self.W, self.H)
@@ -352,6 +310,24 @@ class CNNWrapper(NeuralNetWrapper):
             space["n_epochs"] = [2]
             space["early_stopping"] = [""]    
         return space
+
+    def map_dict(self):
+        orig = NeuralNetWrapper.map_dict(self)
+        orig.update({"structure" :
+                     {
+                         "filter_size" : (mu.filter_size_to_string,
+                                          mu.filter_size_from_string),
+                         "dilation_rate" : (mu.dilation_rate_to_string,
+                                            mu.dilation_rate_from_string),
+                         "kernel_size" : (mu.dilation_rate_to_string,
+                                          mu.dilation_rate_from_string),
+                         "pool_size" : (mu.dilation_rate_to_string,
+                                        mu.dilation_rate_from_string),
+                         "strides" : (mu.neurons_per_layer_to_string,
+                                      mu.neurons_per_layer_from_string),
+                     }                    
+        })
+        return orig    
 
     def string(self):
         return "CNN"

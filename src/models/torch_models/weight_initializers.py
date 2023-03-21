@@ -1,5 +1,68 @@
 import torch, numpy as np
 
+def initializers_from_string(s):
+    """
+    Receives either:
+    s = '[]'
+    s = ['Initializer(N(mu, sigma))']
+    s = ['BiasInitializer(N(mu, sigma), pmin, pmax)']
+    s = ['Initializer(N(mu, sigma))', 'BiasInitializer(N(mu, sigma), pmin, pmax)']
+
+    Parse and return the object(s)
+    """
+    if s == '[]':
+        return []
+
+    s = s[1:-1]
+    if len(s.split('Initializer')) == 2:
+        if len(s.split('BiasInitializer')) == 2:
+            return [BiasInitializer_from_string(s), ]
+        else:
+            return [Initializer_from_string(s), ]
+    else:
+        _, init, bias = s.split('Initializer')
+        init_s = 'Initializer' + init.split("', 'Bias")[0]
+        bias_s = 'BiasInitializer' + bias[:-1]
+        return [Initializer_from_string(init_s),
+                BiasInitializer_from_string(bias_s)]
+
+def Initializer_from_string(s):
+    """
+    Receives  s = 'Initializer(N(mu, sigma))'
+    parse the string and returns an Initializer object.
+    """
+    data = s[:-1].split('Initializer(')[1]
+    
+    distribution = data[0]
+    data = data[2:-1]
+    p1, p2 = data.split(", ")
+
+    if distribution=="N":
+        dstring = "normal"
+    if distribution=="U":
+        dstring = "uniform"
+
+    return Initializer(dstring, "weight", p1, p2)    
+
+def BiasInitializer_from_string(s):
+    """
+    Receives  s = 'BiasInitializer(N(mu, sigma), pmin, pmax)'
+    parse the string and returns a BiasInitializer object.
+    """
+    data = s[:-1].split('BiasInitializer(')[1]
+    
+    distribution = data[0]
+    data = data[2:]
+    p1, p2, pmin, pmax = data.split(", ")
+    p2 = p2[:-1]
+    
+    if distribution=="N":
+        dstring = "normal"
+    if distribution=="U":
+        dstring = "uniform"
+
+    return BiasInitializer(dstring, p1, p2, pmin, pmax)        
+    
 class Initializer(object):
     """
     Contains parameters necessary for calling the right init function in the last
@@ -42,8 +105,17 @@ class Initializer(object):
         """
         if transformer.scaling != '':
             self.p1 = 0
-            self.p2 = 1       
-            
+            self.p2 = 1
+
+    def __str__(self):        
+        s = "Initializer("
+        if self.fname == "normal":
+            fnamestr = "N("
+        if self.fname == "uniform":
+            fnamestr = "U("
+        s += f"{fnamestr}{self.p1}, {self.p2}))"
+        return s
+        
 class BiasInitializer(Initializer):
     """
     Initialize the bias for OB price forecasting layers. The first element will 
@@ -76,7 +148,7 @@ class BiasInitializer(Initializer):
         Update this object using the given pmin and pmax. They will be set to the
         attributes p1 and p2 respectively.        
         """
-
+        
         # New data distribution is mean = 0, std = 1!!
         if transformer.scaling != '':
             self.p1 = 0
@@ -86,3 +158,12 @@ class BiasInitializer(Initializer):
                 self.pmin * np.ones((1, transformer.n_features_))).min()
             self.pmax = transformer.transform(
                 self.pmax * np.ones((1, transformer.n_features_))).max()        
+
+    def __str__(self):        
+        s = "BiasInitializer("
+        if self.fname == "normal":
+            fnamestr = "N("
+        if self.fname == "uniform":
+            fnamestr = "U("
+        s += f"{fnamestr}{self.p1}, {self.p2}), {self.pmin}, {self.pmax})"
+        return s    

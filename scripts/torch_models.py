@@ -10,7 +10,7 @@ from src.euphemia.ploters import *
 from src.models.spliter import MySpliter
 from src.models.torch_wrapper import OBNWrapper
 from src.models.torch_models.weight_initializers import *
-from src.models.parallel_scikit import set_all_seeds
+import src.models.parallel_scikit as ps
 
 ############## Construct model wrapper and load data
 spliter = MySpliter(365, shuffle=False)
@@ -21,7 +21,7 @@ X, Y = model_wrapper.load_train_dataset()
 ptemp = model_wrapper.params()
 ptemp["transformer"] = ""
 ptemp["NN1"] = (888, )
-ptemp["OBN"] = (37, )
+ptemp["OBN"] = ()
 ptemp["OBs"] = 100
 ptemp["early_stopping"] = None
 ptemp["n_epochs"] = 5
@@ -32,15 +32,28 @@ ptemp["OB_weight_initializers"] = {
     "poplayers" : [Initializer("normal", "weight", 0, 1),
                    BiasInitializer("normal", 30, 40, -500, 3000) ]}
 regr = model_wrapper.make(ptemp)
-
-############## Fit model and predict validation set
 (Xt, Yt), (Xv, Yv) = model_wrapper.spliter(X, Y)
 
-set_all_seeds(0)
+############## Fit model and predict validation set
+ps.set_all_seeds(0)
 regr.fit(X, Y)
 yhat = model_wrapper.predict_val(regr, Xv)
 mean_absolute_error(Yv, yhat)
 
+# Sample a configuration from the search space
+search_space = model_wrapper.get_search_space(n=X.shape[0])
+([ptemp], [seed]) = ps.get_param_list_and_seeds(
+    search_space, 1, model_wrapper=model_wrapper)
+
+# Fit the model and compute the error using this configuration
+regr = model_wrapper.make(model_wrapper._params(ptemp))
+(Xt, Yt), (Xv, Yv) = model_wrapper.spliter(X, Y)
+ps.set_all_seeds(seed)
+regr.fit(X, Y)
+yhat = model_wrapper.predict_val(regr, Xv)
+mean_absolute_error(Yv, yhat)
+
+################## Use fitted model to forecast OB
 # Forecasted OB for each epoch (train forecast used for the gradient)
 OBhat = model_wrapper.predict_order_books(regr, Xv)
 ploter = MultiplePlotter(regr, X)
@@ -49,7 +62,6 @@ ploter.display(0, 0, epochs=-1, colormap="viridis")
 # Plot tensor distirbution across epochs
 ploter.distribution(epochs=-1, steps=-1)
 
-################## Use fitted model to forecast OB
 order_book = TorchOrderBook(OBhat[d, h])
 solver = MinDual(order_book)
 ploter = get_ploter(order_book, solver)

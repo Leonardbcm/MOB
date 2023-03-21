@@ -5,6 +5,7 @@
 %aimport src.models.torch_models.ob_datasets
 %aimport src.models.torch_models.obn
 %aimport src.models.torch_models.scalers
+%aimport src.models.torch_models.sign_layer
 %aimport src.models.torch_models.weight_initializers
 %aimport src.models.torch_models.torch_obn
 %aimport src.models.torch_models.torch_solver
@@ -27,6 +28,8 @@
 %aimport src.models.samplers.regularization_sampler
 %aimport src.models.samplers.cnn_structure_sampler
 %aimport src.models.samplers.discrete_log_uniform
+%aimport src.models.samplers.obn_structure_sampler
+%aimport src.models.samplers.weight_initializer_samplers
 
 %aimport src.euphemia.orders
 %aimport src.euphemia.order_books

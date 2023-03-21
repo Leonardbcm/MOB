@@ -735,6 +735,131 @@ class MultiplePlotter(object):
         else:
             return {}
 
+    def get_extreme_orders(self, dataset, steps=-1, epochs=None, variables=-1):
+        ylabels = ["Out of base NN", "After Scaling", "After signs"]
+        base_variables = np.array(["V", "Po", "PoP", "P"])
+        if epochs is None:
+            epochs = range(self.n_epochs)
+            
+        if steps==-1:
+            steps = [1, 2, 3]
+        elif type(steps).__name__ != 'list':
+            steps = [steps]
+            
+        if variables!=-1:
+            base_variables = base_variables[variables]
+
+        res = np.zeros((len(epochs), len(base_variables), len(steps),
+                        self.n(dataset), 24, 2))
+        for x, step in enumerate(steps):
+            variables = [f"{v}{step}" for v in base_variables]
+            for y, variable in enumerate(variables):
+                for i, e in enumerate(epochs):
+                    values = self.get_variable(variable, e, dataset)
+                    res[i, y, x, :, :, 0] = values[:, :, 0]
+                    res[i, y, x, :, :, 1] = values[:, :, -1]
+                    
+        return res
+
+    def plot_extreme_orders(self, dataset, steps=-1, epochs=0, variables=1, d=None,
+                            h=None, ax_=None, linewidth=2, label_fontsize=20, 
+                            fontsize=30):
+        res = self.get_extreme_orders(dataset, steps=-1, epochs=None,
+                                      variables=-1)
+        if d is None:
+            d = range(self.n(dataset))
+        if h is None:
+            h = range(23)        
+        
+        ylabels = ["Out of base NN", "After Scaling", "After signs"]
+        base_variables = np.array(["V", "Po", "PoP", "P"])
+
+        if variables!=-1:
+            base_variables = base_variables[variables]        
+
+        if steps==-1:
+            steps = [1, 2, 3]
+        elif type(steps).__name__ != 'list':
+            steps = [steps]
+        
+        cmap_min = plt.get_cmap("hsv")
+        cmap_max = plt.get_cmap("hsv")
+        if ((type(d).__name__ != 'int') and (len(base_variables) == 1)):
+            variable = base_variables[0]
+            if ax_ is None:
+                fig, (ax, axmax) = plt.subplots(2, 1, gridspec_kw={"hspace" : 0.0})
+            else:
+                ax, axmax = ax_
+
+            markers = ["o", "v", "^"]
+            for s in steps:
+                data_min = res[epochs, variable, s-1, :, :, 0].reshape(-1)
+                color_index = (s-1 + 1) / (len(steps) + 1)
+                color = cmap_min(color_index)
+                
+                xindices = range(len(data_min))
+                ax.scatter(xindices, data_min, c=color, label=ylabels[s-1],
+                           marker=markers[s-1], alpha=0.6)
+
+                data_max = res[epochs, variable, s-1, :, :, 1].reshape(-1)
+                color_index = (s-1 + 1) / (len(steps) + 1)
+                color = cmap_max(color_index)
+                axmax.scatter(xindices, data_max, c=color, label=ylabels[s-1],
+                              marker=markers[s-1], alpha=0.6)
+
+            ax.set_ylabel("Po min")
+            axmax.set_ylabel("Po max")
+            ax.legend()
+            axmax.legend()            
+        else:
+            if ax_ is None:
+                fig, axes = plt.subplots(2, 
+                    len(base_variables),
+                    gridspec_kw={"hspace" : 0.0})
+                for i, variable in enumerate(base_variables):
+                    for s in steps:
+                        ax = axes[0, i]
+                        data_min = res[epochs, i, s-1, d, h, 0]
+                        color_index = (s-1 + 1) / (len(steps) + 1)
+                        color = cmap_min(color_index)
+                    
+                        xindices = s
+                        ax.bar(xindices,data_min,width=1,color=color,
+                               label=ylabels[s-1], edgecolor="k", alpha=0.6)
+                        ax.grid("on", axis="y")
+                        ax.set_title(variable, y=0.85)
+                        ax.set_xticks([])
+
+                        axmax = axes[1, i]                        
+                        data_max = res[epochs, i, s-1, d, h, 1].reshape(-1)
+                        color_index = (s-1 + 1) / (len(steps) + 1)
+                        color = cmap_max(color_index)
+                        axmax.bar(xindices,data_max,width=1,color=color,
+                                  label=ylabels[s-1], edgecolor="k", alpha=0.6)
+                        axmax.grid("on", axis="y")
+                        axmax.set_xticks([])                        
+                    
+                    for ax in axes[0, [1, 2]].flatten():
+                        ax.set_ylim([-490, -510])
+                        
+                    for ax in axes[1, [1, 2]].flatten():                    
+                        ax.set_ylim([2950, 3050])
+                        
+                    axes[0, 0].set_ylabel("PMIN")                        
+                    axes[1, 0].set_ylabel("PMAX")
+
+                    ax.legend()
+
+                plt.suptitle(
+                    f"Limit orders at epoch {epochs} for day {d}, hour {h}")
+            else:
+                ax, axmax = ax_            
+        
+        if ax_ is None:
+            plt.show()
+        else:
+            return {}
+ 
         
 class ExpPloter(object):
     def __init__(self, ploters, save_path):

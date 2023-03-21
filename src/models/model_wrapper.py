@@ -482,9 +482,8 @@ class ModelWrapper(object):
         df.to_csv(self.results_path(), index=False)
 
     def best_params(self, df, for_recalibration=False, acc=False,
-                    filters={}, inverted_filters={}, recompute=True):        
+                    filters={}, inverted_filters={}, recompute=True):
         df = self.filter_results(copy.deepcopy(df), filters, inverted_filters)
-        
         if not acc:
             best_row = df.maes.argmin()
             best_params = df.loc[best_row].to_dict()

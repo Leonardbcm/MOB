@@ -34,3 +34,28 @@ class combined_sampler(rv_continuous):
             samples = samples[0]
             
         return samples
+
+
+class list_combined_sampler(combined_sampler):
+    """
+    Sample form a weighted combination of distributions, where the results
+    of a distribution are lists
+    """
+    def __init__(self, others, weights=1):
+        combined_sampler.__init__(self, others, weights=1)
+
+    def rvs(self, size=1, random_state=None):
+        choices = self.chooser(self.others, size=size, p=self.weights)        
+        samples = []
+        for choice in choices:
+            if choice == []:
+                sampled = []
+            else:
+                sampled = choice.rvs(1, random_state=random_state)
+            
+            samples.append(sampled)                
+                
+        if size == 1:
+            samples = samples[0]
+            
+        return samples    

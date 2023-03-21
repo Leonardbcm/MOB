@@ -31,7 +31,8 @@ class regularization_sampler(rv_continuous):
             regularization = regularizers.l1
         if types == "l2":
             regularization = regularizers.l2        
-            
+
+        # Samples from alpha_min -> alpha_min + alpha_max!
         for i in range(ndistributions):
             distributions.append(distribution(self.alpha_min, self.alpha_max))
 

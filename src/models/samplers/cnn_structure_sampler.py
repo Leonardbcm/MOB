@@ -52,7 +52,7 @@ class cnn_structure_sampler(rv_continuous):
     def rvs(self, size=1, random_state=None):
         all_samples = []        
         for i in range(size):
-            # Sampler the number of layers for each blocks
+            # Sample the number of layers for each blocks
             nlayers = self.nlayers_sampler.rvs(
                 size=1, random_state=random_state)[0]
 
