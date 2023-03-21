@@ -352,7 +352,7 @@ class ModelWrapper(object):
 
         # Replace the atcs if specified
         if self.flow_estimation != "":
-            ATC_file = os.path.join(os.environ["VOLTAIRE"], "data", "datasets",
+            ATC_file = os.path.join(os.environ["MOB"], "data", "datasets",
                                     "OnlyATC", f"joined_{self.flow_estimation}.csv")
             ATCs = pandas.read_csv(ATC_file, index_col="period_start_date")
             ATCs = ATCs.loc[dataset.period_start_date]

@@ -123,7 +123,7 @@ def load_prevs_git(model_name, country="FR"):
 
 def load_prevs(model_wrapper, country="FR", test_dates=None,
                dataset="test_recalibrated", path=os.path.join(
-               os.environ["VOLTAIRE"], "data", "datasets")):
+               os.environ["MOB"], "data", "datasets")):
     path = os.path.join(path, f"EPF_{country}")
     data = pd.read_csv(os.path.join(
         path, model_name + "_" + dataset + "_predictions.csv"))
