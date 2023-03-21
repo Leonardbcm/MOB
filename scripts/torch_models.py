@@ -24,13 +24,11 @@ ptemp["NN1"] = (888, )
 ptemp["OBN"] = ()
 ptemp["OBs"] = 100
 ptemp["early_stopping"] = None
-ptemp["n_epochs"] = 5
+ptemp["n_epochs"] = 1
 ptemp["tensorboard"] = "OBN"
 ptemp["OB_weight_initializers"] = {
-    "polayers" : [Initializer("normal", "weight", 0, 1),
-                  BiasInitializer("normal", 30, 40, -500, 3000)],
-    "poplayers" : [Initializer("normal", "weight", 0, 1),
-                   BiasInitializer("normal", 30, 40, -500, 3000) ]}
+    "polayers" : [BiasInitializer("normal", 30, 40, -500, 3000)],
+    "poplayers" : [BiasInitializer("normal", 30, 40, -500, 3000) ]}
 regr = model_wrapper.make(ptemp)
 (Xt, Yt), (Xv, Yv) = model_wrapper.spliter(X, Y)
 

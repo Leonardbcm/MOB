@@ -66,7 +66,7 @@ class OBNWrapper(TorchWrapper):
             "scaler" : "BCM",
             "transformer" : "Standard",
             "weight_initializers" : [],
-            "scale" : False,            
+            "scale" : "Clip-Sign",
 
             # Training Params            
             "spliter" : self.spliter,
