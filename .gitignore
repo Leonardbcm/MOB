@@ -4,6 +4,7 @@
 *\#
 .\#*
 
+RUN/
 pyvenv.cfg
 import_results.sh
 

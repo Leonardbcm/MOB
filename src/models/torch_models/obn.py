@@ -46,7 +46,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         
         self.store_losses = model_["store_losses"]
         self.tensorboard = model_["tensorboard"]
-        self.logdir = os.path.join(os.environ["VOLTAIRE"], "logs")        
+        self.logdir = os.path.join(os.environ["MOB"], "logs")        
         
         # Used to transform the upper and lower bound!
         self.transformer = model_["transformer"]
@@ -86,7 +86,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
             self.callbacks += [StoreOBhat(self.store_OBhat)]
         self.early_stopping_callbacks()
     
-    ###### METHODS FOR SKLEARN AND VOLTAIRE
+    ###### METHODS FOR SKLEARN
     def fit(self, X, y, verbose=0):        
         # Prepare the data : scale and make datalaoders
         train_loader, val_loader = self.prepare_for_train(X, y)
