@@ -165,14 +165,17 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
     ######### HELPERS
     def early_stopping_callbacks(self):
         if self.very_early_stopping:
-            self.callbacks.append(EarlyStoppingInitialize(self.very_early_stopping))
+            self.callbacks.append(
+                EarlyStoppingInitialize(
+                    monitor="val_loss", verbose=False,
+                    threshold=self.very_early_stopping))
             
         if self.early_stopping == "sliding_average":
             self.callbacks.append(
                 EarlyStoppingSlidingAverage(
                     monitor="val_loss",
                     alpha=self.early_stopping_alpha,
-                    patience=self.early_stopping_patience))        
+                    patience=self.early_stopping_patience))  
 
     def create_network(self, input_shape):
         return SolvingNetwork(input_shape, self.NN1, self.OBs, self.OBN,

@@ -24,6 +24,7 @@ ptemp["NN1"] = (888, )
 ptemp["OBN"] = ()
 ptemp["OBs"] = 100
 ptemp["early_stopping"] = None
+ptemp["very_early_stopping"] = True
 ptemp["n_epochs"] = 1
 ptemp["tensorboard"] = "OBN"
 ptemp["OB_weight_initializers"] = {
