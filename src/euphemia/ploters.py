@@ -608,8 +608,8 @@ class MultiplePlotter(object):
         OB = TorchOrderBook(data)            
         return OB
 
-    def get_yhat(self, e, d, h, dataset):
-        if dataset != "validation":
+    def get_yhat(self, dataset,  e, d, h):
+        if dataset == "validation":
             raise Exception(f"We don't have access to the {dataset} forecasts!")
         if e != -1:
             batch = d // self.batch_size
@@ -625,6 +625,21 @@ class MultiplePlotter(object):
             path = os.path.join(self.save_to_disk, "yvhat.npy")
             yhat = np.load(path)[d_, h]
         return yhat
+
+    def get_all_yhat(self, dataset, e):
+        n_batches = (self.n(dataset)// self.batch_size) + 1            
+        values = np.zeros((self.n(dataset), 24))
+        current = 0
+        for b in range(n_batches):
+            path = self.get_path(e, b, dataset)
+            path_ = os.path.join(path, "yhat.npy")
+            batch = np.load(path_)
+            
+            batch_reshaped = batch.reshape(-1, 24)
+            bs = batch_reshaped.shape[0]
+            values[current:current+bs] = batch_reshaped
+            current += bs
+        return values
 
     def get_variable(self, variable, e, dataset):
         if e != -1:
@@ -684,7 +699,28 @@ class MultiplePlotter(object):
             plt.show()
         else:
             return {}
+        
+    def price_forecasts_distributions(self, dataset, e, ax_=None,
+                                      linewidth=2, label_fontsize=20, 
+                                      fontsize=30, colormap='hsv', **kwargs):
+        if ax_ is None:
+            fig, ax = plt.subplots(1)
+        else:
+            ax = ax_
 
+        yhat = self.get_all_yhat(dataset, e).reshape(-1)
+            
+        color = "b"
+        ax.hist(yhat.reshape(-1), histtype='step', bins=100, color=color,
+                linewidth=linewidth)        
+        ax.grid("on")
+        
+        if ax_ is None:
+            plt.show()
+        else:
+            return {}
+        
+        
     def distribution(self, dataset, ax_=None, steps=-1, epochs=None, variables=-1,
                      linewidth=2, label_fontsize=20, 
                      fontsize=30, colormap='hsv', **kwargs):
@@ -731,7 +767,7 @@ class MultiplePlotter(object):
         plt.suptitle("Variable distribution accross epochs")
         
         if ax_ is None:
-            plt.show()
+            plt.show(block=False)
         else:
             return {}
 
@@ -859,6 +895,108 @@ class MultiplePlotter(object):
             plt.show()
         else:
             return {}
+
+    def scaling_summary(self, regr, Y, linewidth=2, fontsize=30):
+        dataset = "train"
+        e = 0
+        fig, axes = plt.subplots(3, 2, figsize=(19.2, 10.8),
+                                  gridspec_kw={"wspace" : 0.0})
+        
+        # Plot forecasted OB distirbution
+        variables = ["Po", "PoP", "P"]
+        for i in range(3):
+            variable = f"{variables[i]}3"
+            ax = axes[i, 0]
+            values = self.get_variable(variable, e, dataset)
+            ax.hist(values.reshape(-1), bins=500, histtype="step",
+                    color="b", label=f"Epoch {e}",
+                    linewidth=linewidth)
+            ax.set_title(variable, y=0.85)
+            ax.grid("on")
+
+        # Plot forecasted prices distirbution
+        ax = axes[1, 1]
+        self.price_forecasts_distributions(dataset, e, ax_=ax)
+        ax.set_title("Yhat", y=0.85)
+        
+        # Plot transformed prices distirbution
+        ax = axes[2, 1]
+        ax.set_title("Ytransformed", y=0.85)
+        Yt = regr.steps[1][1].transformer.transform(Y).reshape(-1) 
+        ax.hist(Yt.reshape(-1), histtype='step', bins=100, color="b",
+                linewidth=linewidth)
+        ax.grid("on")
+
+        # Signs analysis
+        ax = axes[0, 1]
+        self.limit_orders(e, dataset, ax_=ax, fontsize=fontsize)
+        
+        # Format title
+        transformer = regr.steps[1][1].transformer.scaling
+        po_cliper = str(regr.steps[1][1].model.Po_scaler)
+        pop_cliper = str(regr.steps[1][1].model.PoP_scaler)
+        signs = str(regr.steps[1][1].model.sign_layer)
+        wis = [wi._str(round_=True)
+               for wi in regr.steps[1][1].model.weight_initializers]
+        
+        axes[0, 0].text(0.6, 0.5, po_cliper, transform=axes[0, 0].transAxes)
+        axes[1, 0].text(0.6, 0.5, pop_cliper, transform=axes[1, 0].transAxes)
+        axes[2, 0].text(0.6, 0.5, signs, transform=axes[2, 0].transAxes)
+        axes[2, 1].text(0.75, 0.5, transformer, transform=axes[2, 1].transAxes)
+        for i, wi in enumerate(wis):
+            axes[0, 0].text(0.6, 0.5 - 0.1 * (i + 1), wi,
+                            transform=axes[0, 0].transAxes)
+            axes[1, 0].text(0.6, 0.5 - 0.1 * (i + 1), wi,
+                            transform=axes[1, 0].transAxes)
+
+        
+        title = "Scaling summary "        
+        plt.suptitle("Scaling summary")
+        plt.show()
+        
+
+    def limit_orders(self, e, dataset, ax_=None, fontsize=20):
+        if ax_ is None:
+            fig, ax = plt.subplots(1)
+        else:
+            ax = ax_
+
+        V = self.get_variable("V3", e, dataset)
+        P = self.get_variable("P3", e, dataset)
+
+        p_diff = 100 * np.mean(
+            np.logical_and(np.sign(P) != np.sign(V),
+                           (np.sign(P) != 0)))
+
+        lps = P[:, :, 0].reshape(-1)
+        lpd = P[:, :, -1].reshape(-1)
+       
+        lvs = V[:, :, 0].reshape(-1)
+        lvd = V[:, :, -1].reshape(-1)
+        
+        frac_s = 100 * np.mean(np.logical_and((lps >= 0), (lvs > 0)))
+        frac_d = 100 * np.mean(np.logical_and((lpd <= 0), (lvd < 0)))
+
+        b1 = ax.bar([1], [p_diff],color="r", edgecolor="k",
+                    label="% of sign difference", width = 0.75)
+        b2 = ax.bar([2], [frac_s],color="b",edgecolor="k", width = 0.75, 
+                    label="% of correct supply limit orders")
+        b3 = ax.bar([3], [frac_d], color="g", edgecolor="k", width = 0.75, 
+                    label="% of correct demand limit orders")
+        ax.legend()
+
+        for (b, t) in zip([b1, b2, b3], [p_diff, frac_s, frac_d]):
+            y = b.patches[0].get_y() + b.patches[0].get_height()
+            x = b.patches[0].get_x()
+            txt = str(round(t, ndigits=2)) + "%"
+            ax.text(x, y, txt, fontsize=fontsize)            
+
+        ax.grid("on", axis="y")
+            
+        if ax_ is None:
+            plt.show()
+        else:
+            return {}            
  
         
 class ExpPloter(object):
@@ -869,7 +1007,7 @@ class ExpPloter(object):
 
     def price_forecasts(self, Yv, fontsize=20):
         fig, axes = plt.subplots(
-            3, 2, figsize=(19.2, 10.8), sharex=True, sharey=True,
+            4, 2, figsize=(19.2, 10.8), sharex=True, sharey=True,
             gridspec_kw={"wspace" : 0.0, "hspace" : 0.0})
         axes = axes.flatten()
 
@@ -897,7 +1035,7 @@ class ExpPloter(object):
 
     def price_forecasts_distributions(self, Yv, fontsize=20, linewidth=4):
         fig, axes = plt.subplots(
-            1, 3, figsize=(19.2, 10.8))
+            1, 4, figsize=(19.2, 10.8))
         axes = axes.flatten()                
         for name in self.ploters.keys():
             ax = axes[int(name[1]) - 1]
@@ -923,7 +1061,7 @@ class ExpPloter(object):
                    fontsize=fontsize, ncols=3, loc=8)
 
     def distribution(self, distribution, fontsize=20, linewidth=4):
-        fig, axes = plt.subplots(3, 2, figsize=(19.2, 10.8),
+        fig, axes = plt.subplots(4, 2, figsize=(19.2, 10.8),
                                  gridspec_kw={"wspace" : 0.0})
 
         colormaps = ["Blues", "Reds"]

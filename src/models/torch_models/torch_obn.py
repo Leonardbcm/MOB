@@ -1,5 +1,6 @@
 import torch, time, numpy as np
 from pytorch_lightning import LightningModule
+from torch.profiler import profile, record_function, ProfilerActivity
 from torch import nn
 
 from src.models.torch_models.scalers import TorchMinMaxScaler, TorchCliper
@@ -10,7 +11,7 @@ from src.models.torch_models.torch_solver import PFASolver, BatchPFASolver
 class SolvingNetwork(LightningModule):
     def __init__(self, din, NN1, OBs, OB_input, batch_norm, criterion, N_OUTPUT, k,
                  batch_solve, niter, pmin, pmax, step, mV, check_data, transformer,
-                 scale, weight_initializers):
+                 scale, weight_initializers, profile):
         LightningModule.__init__(self)
         self.NN1_input = list(NN1)
         
@@ -38,10 +39,11 @@ class SolvingNetwork(LightningModule):
         self.scale = scale
         self.weight_initializers = weight_initializers
         self.OB_weight_initializers = {
-            "polayers" : self.weight_initializers,
-            "poplayers" : self.weight_initializers}
+            "polayers" : [wi.a_copy() for wi in self.weight_initializers],
+            "poplayers" :  [wi.a_copy() for wi in self.weight_initializers]}
         self.criterion = criterion
-        self.criterion_ = getattr(nn, self.criterion)()        
+        self.criterion_ = getattr(nn, self.criterion)()
+        self.profile = profile
 
         # Update PMIN and PMAX according to the transformer
         self.update_bounds()
@@ -94,13 +96,13 @@ class SolvingNetwork(LightningModule):
                 a=self.pmin_scaled, b=self.pmax_scaled)
             self.PoP_scaler = TorchMinMaxScaler(
                 a=self.pmin_scaled, b=self.pmax_scaled)
-        if self.scale == "Clip":
+        elif self.scale == "Clip":
             self.Po_scaler = TorchCliper(self.pmin_scaled, self.pmax_scaled)
             self.PoP_scaler = TorchCliper(self.pmin_scaled, self.pmax_scaled)
-        if self.scale == "Clip-Sign":
+        elif self.scale == "Clip-Sign":
             self.Po_scaler = TorchCliper(self.pmin_scaled, self.pmax_scaled)
             self.PoP_scaler = TorchCliper(self.pmin_scaled, self.pmax_scaled,
-                                          max_frac=0.99, min_frac=0.99)            
+                                          max_frac=0.9, min_frac=0.9)            
         else:
             self.Po_scaler = torch.nn.Identity()
             self.PoP_scaler = torch.nn.Identity()
@@ -150,7 +152,11 @@ class SolvingNetwork(LightningModule):
         
     def forward(self, x, predict_order_books=False, return_parts=""):
         ############## 1] Forecast Order Books
-        # Extract features for each day
+        if self.profile:
+            self.profile.step()            
+            self.forward_profiled(x)
+                
+        # Extract features for each day                
         x = self.NN1(x)
 
         # Reshape the data for hourly prediction
@@ -202,6 +208,35 @@ class SolvingNetwork(LightningModule):
         x = x.reshape(-1, self.N_OUTPUT)
         
         return x
+
+    def forward_profiled(self, x):
+        with record_function("NN1"):
+            x = self.NN1(x)
+            x = x.reshape(-1, self.in_obs)
+
+        with record_function("OB_layers"):
+            x =  self.OB_layers(x)
+
+            V = self.vlayers(x)
+            Po = self.polayers(x)
+            PoP = self.poplayers(x)
+            
+        with record_function("OB_coerce"):            
+            Po = self.Po_scaler(Po)
+            PoP = self.PoP_scaler(PoP)
+            P = PoP - Po
+
+            P, V = self.sign_layer(P, V)
+            x = torch.cat([
+                V.reshape(-1, self.OBs, 1),
+                Po.reshape(-1, self.OBs, 1),
+                P.reshape(-1, self.OBs, 1)], axis=2)
+
+        with record_function("Solver"):            
+            x = self.optim_layer(x)
+            x = x.reshape(-1, self.N_OUTPUT)
+        
+        return x    
 
     def _step(self, batch, batch_idx):
         x, y = batch

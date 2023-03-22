@@ -52,6 +52,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         self.transformer = model_["transformer"]
         self.weight_initializers = model_["weight_initializers"]    
         self.scale = model_["scale"]
+        self.profile = model_["profile"]
 
         # Parallelization params
         self.n_cpus = model_["n_cpus"]
@@ -96,11 +97,17 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         print(self.model)
         
         # Create the trainer
-        self.trainer = pl.Trainer(
-            max_epochs=self.n_epochs, callbacks=self.callbacks,
-            logger=TensorBoardLogger(self.logdir, name=self.tensorboard),
-            enable_checkpointing=False, log_every_n_steps=1,
-            default_root_dir=self.logdir, enable_progress_bar=True)
+        if self.tensorboard:
+            self.trainer = pl.Trainer(
+                max_epochs=self.n_epochs, callbacks=self.callbacks,
+                logger=TensorBoardLogger(self.logdir, name=self.tensorboard),
+                enable_checkpointing=False, log_every_n_steps=1,
+                default_root_dir=self.logdir, enable_progress_bar=True)
+        else:
+            self.trainer = pl.Trainer(
+                max_epochs=self.n_epochs, callbacks=self.callbacks,
+                logger=False, enable_checkpointing=False,
+                default_root_dir=self.logdir, enable_progress_bar=True)            
 
         # Train   
         self.trainer.fit(self.model, train_dataloaders=train_loader,
@@ -166,7 +173,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
                               self.N_OUTPUT, self.k, self.batch_solve, self.niter,
                               self.pmin, self.pmax, self.step, self.mV,
                               self.check_data, self.transformer,
-                              self.scale, self.weight_initializers)
+                              self.scale, self.weight_initializers, self.profile)
     
     ######################## DATA FORMATING
     def prepare_for_train(self, X, y):

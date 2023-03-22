@@ -107,14 +107,28 @@ class Initializer(object):
             self.p1 = 0
             self.p2 = 1
 
-    def __str__(self):        
+    def _str(self, round_=False):
         s = "Initializer("
         if self.fname == "normal":
             fnamestr = "N("
         if self.fname == "uniform":
             fnamestr = "U("
-        s += f"{fnamestr}{self.p1}, {self.p2}))"
+        p1s = self.p1
+        p2s = self.p2        
+        if round_:
+            p1s = round(p1s, ndigits=2)
+            p2s = round(p2s, ndigits=2)
+            
+        s += f"{fnamestr}{p1s}, {p2s}))"
         return s
+
+    def a_copy(self):
+        return Initializer(self.fname, self.attribute,
+                           self.p1, self.p2, scale_infeatures=self.scale_infeatures)
+
+    def __str__(self):
+        return self._str(round_=False)
+
         
 class BiasInitializer(Initializer):
     """
@@ -147,8 +161,7 @@ class BiasInitializer(Initializer):
         """
         Update this object using the given pmin and pmax. They will be set to the
         attributes p1 and p2 respectively.        
-        """
-        
+        """        
         # New data distribution is mean = 0, std = 1!!
         if transformer.scaling != '':
             self.p1 = 0
@@ -157,13 +170,31 @@ class BiasInitializer(Initializer):
             self.pmin = transformer.transform(
                 self.pmin * np.ones((1, transformer.n_features_))).min()
             self.pmax = transformer.transform(
-                self.pmax * np.ones((1, transformer.n_features_))).max()        
+                self.pmax * np.ones((1, transformer.n_features_))).max()
 
-    def __str__(self):        
+    def a_copy(self):
+        return BiasInitializer(self.fname,
+                               self.p1, self.p2, self.pmin, self.pmax,
+                               scale_infeatures=self.scale_infeatures)
+
+    def _str(self, round_=False):
         s = "BiasInitializer("
         if self.fname == "normal":
             fnamestr = "N("
         if self.fname == "uniform":
             fnamestr = "U("
+        p1s = self.p1
+        p2s = self.p2
+        pmins = self.pmin
+        pmaxs = self.pmax
+        if round_:
+            p1s = round(p1s, ndigits=2)
+            p2s = round(p2s, ndigits=2)
+            pmins = round(pmins, ndigits=2)
+            pmaxs = round(pmaxs, ndigits=2)            
+
         s += f"{fnamestr}{self.p1}, {self.p2}), {self.pmin}, {self.pmax})"
         return s    
+            
+    def __str__(self):        
+        return self._str(round_=False)

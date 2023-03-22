@@ -65,6 +65,95 @@ solver = MinDual(order_book)
 ploter = get_ploter(order_book, solver)
 ploter.arrange_plot("display", "dual_function",
                     ["dual_derivative", {"method" : "sigmoid"}])
+
+####################  LOAD A CONFIG AND CHECK PRICE DISTRIBUTION
+spliter = MySpliter(365, shuffle=False)
+model_wrapper = OBNWrapper("TEST", "Lyon", spliter=spliter)
+X, Y = model_wrapper.load_train_dataset()
+
+############## Set some params
+ptemp = model_wrapper.params()
+ptemp["transformer"] = ""
+ptemp["NN1"] = (888, )
+ptemp["OBN"] = ()
+ptemp["OBs"] = 100
+ptemp["early_stopping"] = None
+ptemp["n_epochs"] = 1
+ptemp["tensorboard"] = "OBN"
+ptemp["OB_weight_initializers"] = {
+    "polayers" : [BiasInitializer("normal", 30, 40, -500, 3000)],
+    "poplayers" : [BiasInitializer("normal", 30, 40, -500, 3000) ]}
+regr = model_wrapper.make(ptemp)
+(Xt, Yt), (Xv, Yv) = model_wrapper.spliter(X, Y)
+
+############## Fit model and predict validation set
+ps.set_all_seeds(0)
+regr.fit(X, Y)
+yhat = model_wrapper.predict_val(regr, Xv)
+mean_absolute_error(Yv, yhat)
+
+# Sample a configuration from the search space
+search_space = model_wrapper.get_search_space(n=X.shape[0])
+([ptemp], [seed]) = ps.get_param_list_and_seeds(
+    search_space, 1, model_wrapper=model_wrapper)
+
+# Fit the model and compute the error using this configuration
+regr = model_wrapper.make(model_wrapper._params(ptemp))
+(Xt, Yt), (Xv, Yv) = model_wrapper.spliter(X, Y)
+ps.set_all_seeds(seed)
+regr.fit(X, Y)
+yhat = model_wrapper.predict_val(regr, Xv)
+mean_absolute_error(Yv, yhat)
+
+################## Use fitted model to forecast OB
+# Forecasted OB for each epoch (train forecast used for the gradient)
+OBhat = model_wrapper.predict_order_books(regr, Xv)
+ploter = MultiplePlotter(regr, X)
+ploter.display(0, 0, epochs=-1, colormap="viridis")
+
+# Plot tensor distirbution across epochs
+ploter.distribution(epochs=-1, steps=-1)
+
+order_book = TorchOrderBook(OBhat[d, h])
+solver = MinDual(order_book)
+ploter = get_ploter(order_book, solver)
+ploter.arrange_plot("display", "dual_function",
+                    ["dual_derivative", {"method" : "sigmoid"}])
+
+####################  LOAD A CONFIG AND CHECK PRICE DISTRIBUTION
+############## Construct model wrapper and load data
+spliter = MySpliter(365, shuffle=False)
+model_wrapper = OBNWrapper("OBN_TSCHORA", "Lyon", spliter=spliter)
+X, Y = model_wrapper.load_train_dataset()
+
+results = model_wrapper.load_results()
+ptemp = dict(results.loc[0])
+ptemp["n_epochs"] = 2
+ptemp["store_val_OBhat"] = os.path.join(
+    model_wrapper.folder(), "Forecasts", "params_1")
+ptemp["store_OBhat"] = os.path.join(
+    model_wrapper.folder(), "Forecasts", "params_1")
+ptemp["batch_size"] = 10
+params = model_wrapper.params()
+params.update(ptemp)
+regr = model_wrapper.make(params)
+ps.set_all_seeds(0)
+regr.fit(X, Y)
+
+ploter = MultiplePlotter(
+    model_wrapper.spliter, X, params["n_epochs"],
+    save_to_disk=params["store_OBhat"],
+    batch_size=params["batch_size"], OBs=params["OBs"])
+
+ploter.distribution("train", fontsize=12, epochs=[0])
+ploter.price_forecasts_distributions("train", 0)
+
+ploter.scaling_summary(regr)
+
+
+
+
+
 ################### Gaussian manipulation
 n = 10000
 nin = 50

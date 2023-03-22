@@ -61,6 +61,7 @@ class OBNWrapper(TorchWrapper):
             "store_val_OBhat" : False,
             "store_losses" : False,
             "tensorboard" : "",
+            "profile" : False,
             
             # Scaling Parameters
             "scaler" : "BCM",

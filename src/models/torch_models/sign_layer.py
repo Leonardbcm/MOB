@@ -53,7 +53,10 @@ class SignLayer(nn.Module):
         if self.scale == "Clip-Sign":
             return self.forward_clip_sign(P, V)
         else:
-            return self.forward_(P, V)         
+            return self.forward_(P, V)
+
+    def __str__(self):
+        return f"SignLayer({self.scale}, {self.k})"
 
 if __name__ == "__main__":
     def signs(P, V):

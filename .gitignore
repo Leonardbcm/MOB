@@ -5,6 +5,7 @@
 .\#*
 
 RUN/
+log/
 pyvenv.cfg
 import_results.sh
 
