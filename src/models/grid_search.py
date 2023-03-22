@@ -48,7 +48,7 @@ def default_params():
         "n_combis" : 1,
         "restart" : False,
         "n_rep" : 1,
-        "stop_after" : 250,
+        "stop_after" : -1,
         "save_preds" : False,
         
         # RECALIBRATION PARAMS

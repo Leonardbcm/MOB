@@ -47,7 +47,7 @@ with matplotlib.rc_context({ "text.usetex" : True,
 100 * np.sum(p_values[np.argmax(p_values):np.argmax(p_values)+3]) / np.sum(p_values)
 p_bins[np.argmax(p_values):np.argmax(p_values)+3]
 
-##################### Compute the number pf FR, FA, PA
+##################### Compute the number of FR, FA, PA
 # Divide the OrderBook in rejected, accepted and partially accepted part
 OB = LoadedOrderBook(datetimes[0], data_folder)
 solver = TorchSolution(TorchOrderBook(OB.orders))
@@ -76,3 +76,20 @@ with matplotlib.rc_context({ "text.usetex" : True,
     plt.close("all")
     number_of_orders(results)
     plt.show()
+
+##################### Compute the number of orders
+sizes = np.zeros(len(datetimes))
+for i, date_time in enumerate(datetimes):
+    OB = LoadedOrderBook(date_time, data_folder)
+    sizes[i] = OB.n
+
+results = pandas.DataFrame(columns=["period_start_time"])
+results.period_start_time = datetimes
+results.loc[:, "n"] = sizes
+results.loc[:, "hour"] = [d.hour for d in datetimes]
+results.loc[:, "week_day"] = [d.weekday() for d in datetimes]
+results.loc[:, "month"] = [d.month for d in datetimes]
+results.loc[:, "year"] = [d.year for d in datetimes]
+
+number_of_orders(results)
+

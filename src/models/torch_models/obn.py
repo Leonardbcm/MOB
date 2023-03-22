@@ -4,6 +4,7 @@ from torch.utils.data import Dataset, DataLoader
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.metrics import mean_absolute_error
 
+from src.models.torch_models.ob_datasets import EPFDataset
 from src.models.torch_models.torch_obn import SolvingNetwork
 from src.models.torch_models.callbacks import *
 
@@ -37,12 +38,14 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         self.early_stopping = model_["early_stopping"]
         self.early_stopping_alpha = model_["early_stopping_alpha"]
         self.early_stopping_patience = model_["early_stopping_patience"]
-
+        self.very_early_stopping = model_["very_early_stopping"]
+        
         self.criterion = model_["criterion"]
         self.N_OUTPUT = model_["N_OUTPUT"]
         self.spliter = model_["spliter"]
         self.store_OBhat = model_["store_OBhat"]
-        self.store_val_OBhat = model_["store_val_OBhat"]        
+        self.store_val_OBhat = model_["store_val_OBhat"]
+        self.log_every_n_steps = model_["log_every_n_steps"]
         
         self.store_losses = model_["store_losses"]
         self.tensorboard = model_["tensorboard"]
@@ -101,7 +104,8 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
             self.trainer = pl.Trainer(
                 max_epochs=self.n_epochs, callbacks=self.callbacks,
                 logger=TensorBoardLogger(self.logdir, name=self.tensorboard),
-                enable_checkpointing=False, log_every_n_steps=1,
+                enable_checkpointing=False,
+                log_every_n_steps=self.log_every_n_steps,
                 default_root_dir=self.logdir, enable_progress_bar=True)
         else:
             self.trainer = pl.Trainer(
@@ -160,6 +164,9 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
 
     ######### HELPERS
     def early_stopping_callbacks(self):
+        if self.very_early_stopping:
+            self.callbacks.append(EarlyStoppingInitialize(self.very_early_stopping))
+            
         if self.early_stopping == "sliding_average":
             self.callbacks.append(
                 EarlyStoppingSlidingAverage(
@@ -184,7 +191,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         NUM_WORKERS = self.n_cpus_
         train_dataset = EPFDataset(X, y, dtype=self.dtype, N_OUTPUT=self.N_OUTPUT)
         val_dataset = EPFDataset(Xv, yv, dtype=self.dtype, N_OUTPUT=self.N_OUTPUT)
-
+        
         train_loader = DataLoader(
             train_dataset,
             batch_size=self.batch_size, shuffle=self.shuffle_train,
@@ -222,30 +229,5 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size,
                                  num_workers=NUM_WORKERS)
         return test_loader
-
-
-class EPFDataset(Dataset):
-    """
-    Helps constructing DataLoaders
-    """
-    def __init__(self, X, Y=None, dtype=torch.float32, N_OUTPUT=24):
-        self.dtype = dtype
-        self.N_OUTPUT = N_OUTPUT
-        self.X = torch.tensor(X.astype(float), dtype = dtype)
-
-        if Y is not None:
-            self.Y = torch.tensor(Y.astype(float), dtype = dtype)
-        else:
-            self.Y = None
-            
-    def __len__(self):
-        return self.X.shape[0]
-
-    def __getitem__(self, idx):
-        if self.Y is not None:
-            return (self.X[idx, :], self.Y[idx, :])
-        else:
-            return self.X[idx, :]
-
 
     

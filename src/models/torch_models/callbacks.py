@@ -156,6 +156,38 @@ class StoreLosses(Callback):
         plt.grid("on")
         plt.show()
 
+
+class EarlyStoppingInitialize(EarlyStopping):
+    """
+    Cancels training if the Validation error is too high after the first epoch
+    """
+    def __init__(self, monitor="val_loss", verbose=False, threshold=40):
+        EarlyStopping.__init__(self, monitor=monitor, verbose=verbose,
+                               patience=0)
+        self.threshold = threshold
+        self.restore_best_weights = restore_best_weights
+        self.first_epoch = True
+        
+    def on_validation_end(self, trainer, pl_module):
+        if self.first_epoch:
+            current = self.get_monitor_value(trainer.callback_metrics)
+            if current > self.threshold:
+                trainer.should_stop = True
+                
+        self.first_epoch = False
+        return 
+
+    def get_monitor_value(self, logs):
+        monitor_value = logs.get(self.monitor).detach().numpy()
+        if monitor_value is None:
+            print(
+                'Early stopping conditioned on metric `%s` '
+                'which is not available. Available metrics are: %s' %
+                (self.monitor, ','.join(list(logs.keys()))), RuntimeWarning
+            )
+        return monitor_value.ravel()[0]
+    
+
 class EarlyStoppingSlidingAverage(EarlyStopping):
     def __init__(self, monitor="val_loss", verbose=False, alpha=10, patience=10,
                  restore_best_weights=False):

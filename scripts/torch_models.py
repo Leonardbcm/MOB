@@ -148,7 +148,7 @@ ploter = MultiplePlotter(
 ploter.distribution("train", fontsize=12, epochs=[0])
 ploter.price_forecasts_distributions("train", 0)
 
-ploter.scaling_summary(regr)
+ploter.scaling_summary(regr, Y)
 
 
 

@@ -154,9 +154,10 @@ class LoadedOrderBook(SimpleOrderBook):
     Inout orders are regular list of orders that are converted into tensors:
     volumes, prices, p0s and signs.
     """
-    def __init__(self, date_time, data_folder):
+    def __init__(self, date_time, data_folder, volume_lines=False):
         self.date_time = date_time
         self.data_folder = data_folder
+        self.volume_lines = volume_lines
         
         # Load from data_folder and disagregate
         datetime_str = datetime.datetime.strftime(date_time, "%Y-%m-%d_%Hh")
@@ -180,21 +181,33 @@ class LoadedOrderBook(SimpleOrderBook):
                 [supply_orders, demand_orders],
                 [range(len(supply_volumes)-1),range(len(demand_volumes)-1, 0, -1)],
                 [lambda x, y: x + y, lambda x, y: x - y]):
-                
+            
+            reset_ptemp = False            
+            ptemp = prices[iteration[0]]
             for i in iteration:
                 vi = volumes[i]
                 pi = prices[i]
                 vi1 = volumes[operation(i, 1)]
                 pi1 = prices[operation(i, 1)]
-
-                # Do nothing if the volumes are identical
-                if vi != vi1:        
+                
+                # If volumes are identical, store the last price!
+                if (vi == vi1) and (reset_ptemp):
+                    ptemp = pi
+                    reset_ptemp = False
+                if vi != vi1:
+                    if (not reset_ptemp) and (self.volume_lines):
+                        reset_ptemp = True
+                        print(f"Using price {ptemp} in place of price {pi}  at volume {vi}")
+                        p_to_use = ptemp
+                    else:
+                        p_to_use = pi
+                        
                     # If prices are identical, this is a step order
-                    if pi == pi1:
-                        container += [StepOrder(side, pi1, vi1 - vi)]
+                    if p_to_use == pi1:
+                        container += [StepOrder(side, p_to_use, vi1 - vi)]
                     else:
                         # Otherwise, this is a linear order
-                        container += [LinearOrder(side, pi, pi1, vi1 - vi)]
+                        container += [LinearOrder(side, p_to_use, pi1, vi1 - vi)]
 
         SimpleOrderBook.__init__(self, supply_orders + demand_orders)
         
@@ -205,20 +218,21 @@ class TorchOrderBook(SimpleOrderBook):
     Inout orders are regular list of orders that are converted into tensors:
     volumes, prices, p0s and signs.
     """
-    def __init__(self, orders):
+    def __init__(self, orders, requires_grad=True):
         # If given a list of orders
         if ((type(orders).__name__ == "list")
             or ((type(orders).__name__ == "ndarray") and len(orders.shape) == 1)):
             SimpleOrderBook.__init__(self, orders)         
             volumes = torch.tensor([o.V * o.sign for o in self.orders],
-                                   dtype=float, requires_grad=True)
+                                   dtype=float, requires_grad=requires_grad)
             prices = torch.tensor([o.P for o in self.orders],
-                                  dtype=float, requires_grad=True)
+                                  dtype=float, requires_grad=requires_grad)
             p0s = torch.tensor([o.p0 for o in self.orders],
-                               dtype=float, requires_grad=True)
-            volumes.retain_grad()
-            prices.retain_grad()
-            p0s.retain_grad()
+                               dtype=float, requires_grad=requires_grad)
+            if requires_grad:
+                volumes.retain_grad()
+                prices.retain_grad()
+                p0s.retain_grad()
         else:
             # If given a list of vectors
             volumes = orders[:, 0]
@@ -234,7 +248,8 @@ class TorchOrderBook(SimpleOrderBook):
                           directions, f(p0s), f(prices), f(volumes))]
             
             SimpleOrderBook.__init__(self, os)
-            
+
+        self.requires_grad = requires_grad            
         self.vs = volumes
         self.ps = prices
         self.pzeros = p0s
@@ -276,7 +291,7 @@ class TorchOrderBook(SimpleOrderBook):
         return torch.cat([
             self.vs.reshape(-1, 1),
             self.pzeros.reshape(-1, 1),
-            self.ps.reshape(-1, 1)], axis=1).resOBhape(1, -1, 3)
+            self.ps.reshape(-1, 1)], axis=1).reshape(1, -1, 3)
 
     def accepted_volume(self, l):
         return np.sum([o.accepted_volume(l) for o in self.supply])

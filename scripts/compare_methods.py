@@ -1,20 +1,22 @@
-%load_ext autoreload
-%autoreload 1
-%aimport src.analysis.compare_methods_utils 
+%load aimport
 
-import os, datetime, numpy as np, pandas, matplotlib, matplotlib.pyplot as plt
+import os, datetime, numpy as np, pandas, matplotlib, matplotlib.pyplot as plt, time
+from torch.utils.data import DataLoader
+
 from src.euphemia.order_books import LoadedOrderBook, TorchOrderBook
 from src.euphemia.solvers import MinDual, TorchSolution
 from src.euphemia.ploters import get_ploter
 from src.analysis.compare_methods_utils import it_results
 from src.analysis.utils import load_real_prices
 
-from torch.utils.data import DataLoader
-from src.models.obn.ob_datasets import OrderBookDataset
-from src.models.obn.torch_solver import BatchPFASolver
+from src.models.torch_models.ob_datasets import OrderBookDataset, DirectOrderBookDataset
+from src.models.torch_models.torch_solver import BatchPFASolver
 ################## LOAD from real data AND compare solutions for 1 day
 base_folder = os.environ["MOB"]
 data_folder = os.path.join(base_folder, "HOURLY")
+# call df = load_real_prices(-1) to get all dataset
+df = load_real_prices(-1) 
+
 date_time = datetime.datetime(2016, 10, 30, 3)
 
 OB = LoadedOrderBook(date_time, data_folder)
@@ -32,9 +34,6 @@ ploter.arrange_plot("display", "dual_function",
 torch_book = TorchOrderBook(OB.orders)
 torch_solver = TorchSolution(torch_book)
 pstar = torch_solver.solve()
-
-# call df = load_real_prices(-1) to get all dataset
-df = load_real_prices(10)
 ################## LOAD from real data AND compare solutions for all days
 datetimes = df.index
 ks = [1, 10, 100, 1000]
@@ -113,3 +112,41 @@ with matplotlib.rc_context({ "text.usetex" : True,
     plt.close("all")
     it_results()
     plt.show()
+    
+############## Compare different loading strategies
+obd = OrderBookDataset(data_folder, df.index, 2819,
+                       requires_grad=False)
+dobd = DirectOrderBookDataset(data_folder, df.index, 2819,
+                              requires_grad=False)
+
+batch_size = 30
+loader = DataLoader(obd, batch_size=batch_size*24, num_workers=os.cpu_count())
+dloader = DataLoader(dobd, batch_size=batch_size*24, num_workers=os.cpu_count())
+
+n = len(df.index) // (batch_size * 24)
+iloader = iter(loader)
+idloader = iter(dloader)
+
+res = np.zeros(n)
+loader_times = np.zeros(n)
+dloader_times = np.zeros(n)
+for i in range(n):
+    start = time.time()
+    batch, batch_idx = next(iloader)
+    st = time.time()    
+    dbatch, dbatch_idx = next(idloader)
+    stop = time.time()    
+    
+    loader_times[i] = st - start
+    dloader_times[i] = stop - st
+    res[i] = (dbatch == batch).all()
+
+results = pandas.DataFrame(columns=["batch", "res", "loader_time", "dloader_time"])
+results.batch = range(n)
+results.res = res
+results.loader_time = loader_times
+results.dloader_time = dloader_times
+
+results.res.mean()
+results.loader_time.mean()
+results.dloader_time.mean()

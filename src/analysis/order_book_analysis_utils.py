@@ -75,3 +75,29 @@ def number_of_orders(results, fontsize=20):
     ax1.tick_params(axis="both", labelsize=fontsize)
     ax2.tick_params(axis="both", labelsize=fontsize)    
     ax1.legend(fontsize=fontsize)    
+
+def number_of_orders(results):
+    fig, axes = plt.subplots(2, 2, figsize=(19.2, 10.8))
+    axes = axes.flatten()
+
+    for ax, col in zip(axes, ["hour", "week_day", "month", "year"]):
+        by_ = results.groupby(by=col).n.mean()
+    
+        min_ = np.min(by_)
+        max_ = np.max(by_)
+        
+        step = 10 * (max_ - min_) / 100
+        ax.bar(by_.index, by_.values, width=0.8)
+        ax.set_ylim([min_ - step, max_ + step])
+        ax.grid("on", axis="y")
+        ax.set_xlabel(col)
+        ax.set_ylabel("Number of bids")
+        ax.set_title(f"Average bids per {col}")
+
+    max_ = np.max(results.n)
+    min_ = np.min(results.n)
+
+    plt.suptitle(f"Biggest = {max_}, Smallest = {min_}")
+    
+    plt.show()
+    

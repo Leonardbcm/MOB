@@ -205,10 +205,10 @@ ploter.plot_extreme_orders("train", steps=-1, epochs=0, variables=-1, d=0, h=3,
 #################### Check XP settings
 save_path = os.path.join(model_wrapper.folder(), "Forecasts")
 params = copy.deepcopy(ptemp)
-params["n_epochs"] = 1
+params["n_epochs"] = 1000
 regrs = {}
-for parameters, name in zip([p12, p31, p32, p41, p42],
-                            ["P12", "P31", "P32", "P41","P42"]):
+for parameters, name in zip([p12, p31],
+                            ["P12", "P31"]):
     param_temps = copy.deepcopy(params)
     param_temps.update(parameters)
 
@@ -230,8 +230,8 @@ for parameters, name in zip([p12, p31, p32, p41, p42],
 
 maes = {}
 ploters = {}
-for parameters, name in zip([p12, p31, p32, p41, p42],
-                            ["P12", "P31", "P32", "P41","P42"]):
+for parameters, name in zip([p12, p31],
+                            ["P12", "P31"]):
     param_temps = copy.deepcopy(params)
     param_temps.update(parameters)    
     

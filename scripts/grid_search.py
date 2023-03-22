@@ -36,13 +36,13 @@ kwargs = {
         #[MultiSVRWrapper, {"n_cpus" : 1}],
         #[DNNWrapper, {"n_cpus" : half_cpus}],        
         #[CNNWrapper, {"n_cpus" : half_cpus}],
-        [OBNWrapper, {"n_cpus" : 1}],        
+        [OBNWrapper, {"n_cpus" : 1}],
     ), 
     
     # GRID SEARCH PARAMS
     "restart" : True,
-    "n_combis" : 20,
-    "n_rep" : 5,
+    "n_combis" : 1,
+    "n_rep" : 2,
     "fast" : True,
 }
 run(**kwargs)

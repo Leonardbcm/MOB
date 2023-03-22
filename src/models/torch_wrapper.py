@@ -62,6 +62,7 @@ class OBNWrapper(TorchWrapper):
             "store_losses" : False,
             "tensorboard" : "",
             "profile" : False,
+            "log_every_n_steps" : 1,
             
             # Scaling Parameters
             "scaler" : "BCM",
@@ -76,6 +77,7 @@ class OBNWrapper(TorchWrapper):
             "early_stopping" : "sliding_average",
             "early_stopping_alpha" : 20,
             "early_stopping_patience" : 20,
+            "very_early_stopping" : False,
             "shuffle_train" : True,
 
             # Optimizer Params
@@ -118,8 +120,14 @@ class OBNWrapper(TorchWrapper):
             "batch_norm" : stats.bernoulli(0.5),
             "batch_size" : discrete_loguniform(10, n+1),            
             "scaler" : ["BCM", "Standard", "Median", "SinMedian"],
-            "transformer" : ["BCM", "Standard", "Median", "SinMedian", ""],
-            "stop_after" : [stop_after],            
+            "transformer" : combined_sampler(
+                ["BCM", "Standard", "Median", "SinMedian", ""],
+                weights = [1, 1, 1, 1, 4],
+            ),
+            "stop_after" : [stop_after],
+            "log_every_n_steps" : [1],
+            "tensorboard" : ["OBN_GRIDSEARCH"],
+            "very_early_stopping" : [40],
         }
         if fast:
             space["n_epochs"] = [2]
