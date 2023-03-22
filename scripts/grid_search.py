@@ -44,7 +44,7 @@ kwargs = {
     # GRID SEARCH PARAMS
     "restart" : True,
     "n_combis" : 1,
-    "n_rep" : 2,
-    "fast" : True,
+    "n_rep" : 500,
+    "fast" : False,
 }
 run(**kwargs)
