@@ -74,6 +74,7 @@ def run(**kwargs):
     RECALIBRATE = kwargs["RECALIBRATE"]
 
     ## GENERAL PARAMS
+    GLOBAL_SEED = kwargs["GLOBAL_SEED"]
     name = kwargs["name"]
     datasets = kwargs["datasets"]
     EPF = kwargs["EPF"]
@@ -140,7 +141,7 @@ def run(**kwargs):
                         model_wrapper = run_grid_search(
                             name, dataset, model, country, base_dataset_name,
                             fast, EPF, n_combis_, restart, stop_after, n_cpus_,
-                            n_val, model_params, i, save_preds)
+                            n_val, model_params, i, save_preds, GLOBAL_SEED)
 
                         if (n_rep > 1) and restart:
                             print(
@@ -172,7 +173,7 @@ def run(**kwargs):
 
 def run_grid_search(name, dataset, model, country, base_dataset_name, fast, EPF,
                     n_combis, restart, stop_after, n_cpus, n_val, model_params,
-                    i, save_preds):
+                    i, save_preds, GLOBAL_SEED):
     # During grid search, the validation set is the last year of data
     spliter = MySpliter(n_val, shuffle = False)
 
@@ -191,7 +192,7 @@ def run_grid_search(name, dataset, model, country, base_dataset_name, fast, EPF,
     print("STARTING REPETITION : ", str(i))
     
     # This makes sure that all the models will have the same sampled parameters
-    ps.set_all_seeds(1)
+    ps.set_all_seeds(GLOBAL_SEED)
     param_list, seeds = ps.get_param_list_and_seeds(
         search_space, n_combis, model_wrapper=model_wrapper, restart=restart)
     results = ps.parallelize(n_cpus, model_wrapper, param_list, X, y,
