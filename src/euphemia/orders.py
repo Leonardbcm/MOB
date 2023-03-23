@@ -229,6 +229,10 @@ class LinearOrder(SimpleOrder):
             raise InvalidInputError(
                 "For a Supply order, p2 should be higher than p1.")
 
+        if v <= 0:
+            raise InvalidInputError(
+                "V should be > 0!")        
+        
         self.v = v
         self.v0 = v0
         self.v1 = v0 + v

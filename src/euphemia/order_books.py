@@ -194,7 +194,7 @@ class LoadedOrderBook(SimpleOrderBook):
                 if (vi == vi1) and (reset_ptemp):
                     ptemp = pi
                     reset_ptemp = False
-                if vi != vi1:
+                if vi1 > vi:
                     if (not reset_ptemp) and (self.volume_lines):
                         reset_ptemp = True
                         print(f"Using price {ptemp} in place of price {pi}  at volume {vi}")
@@ -218,17 +218,17 @@ class TorchOrderBook(SimpleOrderBook):
     Inout orders are regular list of orders that are converted into tensors:
     volumes, prices, p0s and signs.
     """
-    def __init__(self, orders, requires_grad=True):
+    def __init__(self, orders, dtype=torch.float32, requires_grad=True):
         # If given a list of orders
         if ((type(orders).__name__ == "list")
             or ((type(orders).__name__ == "ndarray") and len(orders.shape) == 1)):
             SimpleOrderBook.__init__(self, orders)         
             volumes = torch.tensor([o.V * o.sign for o in self.orders],
-                                   dtype=float, requires_grad=requires_grad)
+                                   dtype=dtype, requires_grad=requires_grad)
             prices = torch.tensor([o.P for o in self.orders],
-                                  dtype=float, requires_grad=requires_grad)
+                                  dtype=dtype, requires_grad=requires_grad)
             p0s = torch.tensor([o.p0 for o in self.orders],
-                               dtype=float, requires_grad=requires_grad)
+                               dtype=dtype, requires_grad=requires_grad)
             if requires_grad:
                 volumes.retain_grad()
                 prices.retain_grad()
@@ -249,7 +249,8 @@ class TorchOrderBook(SimpleOrderBook):
             
             SimpleOrderBook.__init__(self, os)
 
-        self.requires_grad = requires_grad            
+        self.requires_grad = requires_grad
+        self.dtype = dtype
         self.vs = volumes
         self.ps = prices
         self.pzeros = p0s

@@ -127,19 +127,31 @@ n = len(df.index) // (batch_size * 24)
 iloader = iter(loader)
 idloader = iter(dloader)
 
+# Comparison loop
 res = np.zeros(n)
+for i in range(n):
+    batch, batch_idx = next(iloader)
+    dbatch, dbatch_idx = next(idloader)
+    res[i] = (dbatch == batch).all()
+
+# Time Loops
+iloader = iter(loader)
+idloader = iter(dloader)
 loader_times = np.zeros(n)
-dloader_times = np.zeros(n)
 for i in range(n):
     start = time.time()
     batch, batch_idx = next(iloader)
-    st = time.time()    
+    stop = time.time()    
+    
+    loader_times[i] = stop - start
+
+dloader_times = np.zeros(n)
+for i in range(n):
+    start = time.time()
     dbatch, dbatch_idx = next(idloader)
     stop = time.time()    
     
-    loader_times[i] = st - start
-    dloader_times[i] = stop - st
-    res[i] = (dbatch == batch).all()
+    dloader_times[i] = stop - start
 
 results = pandas.DataFrame(columns=["batch", "res", "loader_time", "dloader_time"])
 results.batch = range(n)

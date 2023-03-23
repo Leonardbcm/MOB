@@ -26,7 +26,7 @@ OBN training uses all cpus, so use only 1 cpu for configuration.
 n_cpus = os.cpu_count()
 half_cpus = int(n_cpus/2)
 kwargs = {
-    "GLOBAL_SEED" : 1,
+    "GLOBAL_SEED" : 0,
     
     # TASKS
     "GRID_SEARCH" : True,
@@ -44,7 +44,7 @@ kwargs = {
     # GRID SEARCH PARAMS
     "restart" : True,
     "n_combis" : 1,
-    "n_rep" : 500,
+    "n_rep" : 5000,
     "fast" : False,
 }
 run(**kwargs)
