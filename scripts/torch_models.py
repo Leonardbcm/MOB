@@ -40,12 +40,16 @@ yhat = model_wrapper.predict_val(regr, Xv)
 mean_absolute_error(Yv, yhat)
 
 # Sample a configuration from the search space
+ps.set_all_seeds(1)
 search_space = model_wrapper.get_search_space(n=X.shape[0])
 ([ptemp], [seed]) = ps.get_param_list_and_seeds(
     search_space, 1, model_wrapper=model_wrapper)
 
 # Fit the model and compute the error using this configuration
-regr = model_wrapper.make(model_wrapper._params(ptemp))
+params = model_wrapper._params(ptemp)
+params["early_stopping"] = ""
+params["very_early_stopping"] = False
+regr = model_wrapper.make(params)
 (Xt, Yt), (Xv, Yv) = model_wrapper.spliter(X, Y)
 ps.set_all_seeds(seed)
 regr.fit(X, Y)

@@ -156,27 +156,26 @@ class StoreLosses(Callback):
         plt.grid("on")
         plt.show()
 
-
-class EarlyStoppingInitialize(EarlyStopping):
+        
+class EarlyStoppingInitialize(Callback):
     """
     Cancels training if the Validation error is too high after the first epoch
     """
-    def __init__(self, monitor="val_loss", verbose=False, threshold=40):
-        EarlyStopping.__init__(self, monitor=monitor, verbose=verbose, patience=0)
+    def __init__(self, threshold=40):
+        Callback.__init__(self)
         self.threshold = threshold
         self.first_epoch = True
         
     def on_validation_end(self, trainer, pl_module):
         if self.first_epoch:
             current = trainer.callback_metrics["val_loss"]
+            print(f"\nVal loss is {current}\n")
             if current > self.threshold:
-                print(
-                    f"Not training the model because initial val loss is {current}")
+                print(f"\nNot training the model because initial val loss is {current}\n")
                 trainer.should_stop = True
                 
         self.first_epoch = False
-        return
-    
+        
 
 class EarlyStoppingSlidingAverage(EarlyStopping):
     def __init__(self, monitor="val_loss", verbose=False, alpha=10, patience=10,
@@ -205,10 +204,10 @@ class EarlyStoppingSlidingAverage(EarlyStopping):
             self.wait += 1
             if self.wait >= self.patience:
                 self.stopped_epoch = trainer.current_epoch
+                print(f"Stopping Training after wait = {self.wait}")
+                print(f"{self.monitor} is at {current} while best is {self.best}")
                 trainer.should_stop = True
-                if self.restore_best_weights:
-                    if self.verbose > 0:
-                        print("Can't restore weights of a torch module")
+                
         
     def get_monitor_value(self, logs):
         monitor_value = logs.get(self.monitor).detach().numpy()

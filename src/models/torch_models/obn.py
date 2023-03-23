@@ -89,9 +89,15 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         if self.store_OBhat:
             self.callbacks += [StoreOBhat(self.store_OBhat)]
         self.early_stopping_callbacks()
-    
+
+    def check_fit(self):
+        if self.transformer.scaling == "":
+            self.trainer.should_stop
+        
     ###### METHODS FOR SKLEARN
-    def fit(self, X, y, verbose=0):        
+    def fit(self, X, y, verbose=0):
+        #self.check_fit()
+        
         # Prepare the data : scale and make datalaoders
         train_loader, val_loader = self.prepare_for_train(X, y)
 
@@ -164,19 +170,17 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
 
     ######### HELPERS
     def early_stopping_callbacks(self):
-        if self.very_early_stopping:
-            self.callbacks.append(
-                EarlyStoppingInitialize(
-                    monitor="val_loss", verbose=False,
-                    threshold=self.very_early_stopping))
-            
         if self.early_stopping == "sliding_average":
             self.callbacks.append(
                 EarlyStoppingSlidingAverage(
                     monitor="val_loss",
                     alpha=self.early_stopping_alpha,
-                    patience=self.early_stopping_patience))  
+                    patience=self.early_stopping_patience))
 
+        if self.very_early_stopping:
+            self.callbacks.append(
+                EarlyStoppingInitialize(threshold = self.very_early_stopping))
+            
     def create_network(self, input_shape):
         return SolvingNetwork(input_shape, self.NN1, self.OBs, self.OBN,
                               self.batch_norm, self.criterion,
