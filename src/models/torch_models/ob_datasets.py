@@ -3,6 +3,8 @@ from torch.utils.data import Dataset
 from pytorch_lightning import LightningModule
 from src.euphemia.order_books import LoadedOrderBook, TorchOrderBook
 from src.euphemia.order_books import SimpleOrderBook
+from src.models.torch_models.torch_solver import *
+from src.euphemia.solvers import *
 
 class EPFDataset(Dataset):
     """
@@ -29,44 +31,116 @@ class EPFDataset(Dataset):
 
     
 class OrderBookDataset(Dataset):
-    def __init__(self, data_folder, datetimes, OBs, coerce_size=True,
-                 requires_grad=True, dtype=torch.float32):
+    def __init__(self, data_folder, datetimes, OBs,
+                 real_prices = None,
+                 niter=30, pmin=-500, pmax=3000, k=100,
+                 coerce_size=True, requires_grad=True, dtype=torch.float32):
         self.data_folder = data_folder
+        self.real_prices = real_prices
         self.datetimes = datetimes
         self.OBs = OBs
         self.requires_grad = requires_grad
         self.dtype = dtype
         self.coerce_size_ = coerce_size
+
+        self.ns = int(self.OBs / 2)
+        self.nd = int(self.OBs / 2)
+        if (self.OBs % 2) != 0:            
+            self.nd += 1
+            
+        self.nd -= 3
+        self.ns -= 3
+
+        self.ns_before = int(self.ns / 2)
+        self.ns_after = int(self.ns / 2)
+        if (self.ns % 2) != 0:
+            self.ns_after += 1
+
+        self.nd_before = int(self.nd / 2)
+        self.nd_after = int(self.nd / 2)
+        if (self.nd % 2) != 0:
+            self.nd_after += 1
+
+        self.pmin = pmin
+        self.pmax = pmax
+        self.k = k
+        self.niter = niter        
         
     def __len__(self):
         return len(self.datetimes)
 
     def __getitem__(self, idx):
         date_time = self.datetimes[idx]
-        loaded_order_book = LoadedOrderBook(date_time, self.data_folder)
-        torch_order_book = TorchOrderBook(
-            loaded_order_book.orders, requires_grad=self.requires_grad)
-        data = torch_order_book.data
+        order_book = LoadedOrderBook(date_time, self.data_folder)
 
-        if self.coerce_size_:
-            data = self.coerce_size(data)
+        if (self.coerce_size_) and (order_book.n > self.OBs):
+            order_book = self.shrink(order_book, idx)
             
-        return data, torch.tensor(idx)
-        
-    def coerce_size(self, data):
-        """
-        Given an order book of size 1 x S x 3, returns another order book
-        of shape 1 x OBs x 3.
+        order_book = TorchOrderBook(
+            order_book.orders, requires_grad=self.requires_grad)
+        data = order_book.data
 
-        This transformation shall not modify equilibrium.
-        In case there are not enough orders, We add orders with V=0 to fill the OB.
-        The case where there are too much orders is not handled.
-        """
+        self.coerce_size_ = False
+        if (self.coerce_size_) and (data.shape[1] <= self.OBs):
+            data = self.extend(data)
+            print("extended")
+        else:
+            data = data.reshape(-1, 3)
+        self.coerce_size_ = True
+        
+        return data, torch.tensor(idx)
+
+    def shrink(self, OB, idx):
+        if self.real_prices is None:
+            self.solver = MinDual(OB, pmin=self.pmin, pmax=self.pmax)            
+            pstar = self.solver.solve("dual_derivative_heaviside")
+        else:
+            pstar = self.real_prices.loc[self.datetimes[idx], "price"]
+
+        ####### Supply
+        # Extract the limit order
+        supply_orders = [OB.supply[0]]
+        OBs = SimpleOrderBook(OB.supply[1:])
+        
+        # Sort orders by closeness to pstar
+        supply_before = OBs.orders[((pstar - OBs.p0s) >= 0)]
+        if len(supply_before) > self.ns_before:
+            remaining_supply_before=SimpleOrderBook(supply_before[:-self.ns_before])
+            supply_orders += [remaining_supply_before.sum("Supply")]            
+        supply_orders += list(supply_before[-self.ns_before:])
+        
+        supply_after = OBs.orders[((pstar - OBs.p0s) < 0)]
+        supply_orders += list(supply_after[:self.ns_after])        
+        if len(supply_after) > self.ns_after:
+            remaining_supply_after = SimpleOrderBook(supply_after[self.ns_after:])
+            supply_orders += [remaining_supply_after.sum("Supply")]
+            
+        ######## Demand
+        # Extract the limit order
+        demand_orders = [OB.demand[0]]
+        OBd = SimpleOrderBook(OB.demand[1:])
+        
+        demand_before = OBd.orders[((pstar - OBd.p0s) < 0)]
+        if len(demand_before) > self.nd_before:
+            remaining_demand_before=SimpleOrderBook(demand_before[:-self.nd_before])
+            demand_orders += [remaining_demand_before.sum("Demand")]
+        demand_orders += list(demand_before[-self.nd_before:])            
+            
+        demand_after = OBd.orders[((pstar - OBd.p0s) >= 0)]
+        demand_orders += list(demand_after[:self.nd_after])        
+        if len(demand_after) > self.nd_after:
+            remaining_demand_after = SimpleOrderBook(demand_after[self.nd_after:])
+            demand_orders += [remaining_demand_after.sum("Demand")]            
+            
+        OB_shrinked = SimpleOrderBook(np.array(supply_orders + demand_orders))
+        return OB_shrinked
+
+    def extend(self, data):
         coerced_order_book = torch.zeros((self.OBs, 3), dtype=self.dtype)
         coerced_order_book[:data.shape[1], :] = data
         return coerced_order_book
     
-
+    
 class DirectOrderBookDataset(OrderBookDataset):
     """
     Directly Load Data, no time to create order objects

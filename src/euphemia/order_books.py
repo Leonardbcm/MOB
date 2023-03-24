@@ -101,6 +101,17 @@ class SimpleOrderBook(OrderBook):
     def price_range(self, pmin, pmax, step=0.01):
         return np.arange(pmin, pmax + step/2, step)
 
+    def sum(self, direction):
+        # Only 1 step order in order book!
+        if self.n == 1:
+            return self.orders[0]
+        
+        v = self.volumes.sum()
+        p1 = self.orders[0].p0
+        p2 = self.orders[-1].p0  + self.orders[-1].P
+            
+        return LinearOrder(direction, p1, p2, v)
+    
     def _curves_fit(self, step=0.01):
         pmin_supply = self.pmin_supply
         pmax_supply = self.pmax_supply            

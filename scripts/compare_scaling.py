@@ -230,8 +230,8 @@ for parameters, name in zip([p12, p31],
 
 maes = {}
 ploters = {}
-for parameters, name in zip([p12, p31],
-                            ["P12", "P31"]):
+for parameters, name in zip([p11, p12, p21, p22, p31, p32, p41, p42],
+                            ["P11", "P12", "P21", "P22", "P31", "P32","P41","P42"]):
     param_temps = copy.deepcopy(params)
     param_temps.update(parameters)    
     

@@ -1,5 +1,7 @@
 import os, pandas, copy, ast, numpy as np
 from ast import literal_eval as make_tuple
+from tensorflow.keras import initializers
+from tensorflow.keras import regularizers
 from src.models.torch_models.weight_initializers import initializers_from_string
 import src.models.spliter as SPL
 
