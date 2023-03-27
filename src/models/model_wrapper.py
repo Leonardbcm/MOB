@@ -5,7 +5,7 @@ from collections import OrderedDict
 
 import src.models.parallel_scikit as ps
 import src.models.model_utils as mu
-from src.analysis.evaluate import mae, smape, mape, rmse, rmae, dae, cmap
+from src.analysis.evaluate import mae, smape, mape, rmse, rmae, dae, cmap, ACC
 from src.models.scalers import DataScaler
 
 class ModelWrapper(object):
@@ -14,10 +14,24 @@ class ModelWrapper(object):
     models in general and enables parallel grid searches around models.
     Enables using the oob's predictions for evaluating a model's quality during 
     grid searches.
+
+    Order Books models parameters:
+    use_order_books : indicates if the order books should be present in the 
+                      input data X.
+    separate_optim : indicates if the solver part of the neural network shall be
+                        integrated in the gradient computation
+    skip_connection : indicates if we add a skip connection of the original order
+                      books before the solver layer (predict an OB differential)
+                      if use_order_books is false, this will still work.
+    order_book_size : The size of shrinked order books to load.    
     """
     def __init__(self, prefix, dataset_name, country="", spliter=None,
                  predict_two_days=False, known_countries=["CH", "GB"],
-                 flow_estimation="",  countries_to_predict="not_graph"):
+                 skip_connection=False,                 
+                 use_order_books=False,
+                 order_book_size=20,
+                 separate_optim=False,                 
+                 flow_estimation="", countries_to_predict="not_graph"):
         self.prefix = prefix
         self.dataset_name = dataset_name
         self.country = country
@@ -39,6 +53,20 @@ class ModelWrapper(object):
         self.known_countries = known_countries
         self.countries_to_predict_ = countries_to_predict
         self.flow_estimation = flow_estimation
+        
+        self.use_order_books = use_order_books
+        self.separate_optim = separate_optim
+        self.order_book_size = order_book_size
+        self.skip_connection = skip_connection
+
+        if self.separate_optim and (self.order_book_size < 1):
+            raise Exception("Must provide a valid order book size to load if prediction and optimizaiton are separated!")
+        
+        if self.skip_connection and (self.order_book_size < 1):
+            raise Exception("Must provide a valid order book size to load if you want to add a skip connection")
+
+        if self.use_order_books and (self.order_book_size < 1):
+            raise Exception("Must provide a valid order book size to load if you want to add them to the input data")        
 
         # For differentiating price and edge labels,
         # will be overwritten for graphs
@@ -65,9 +93,9 @@ class ModelWrapper(object):
 
     def results_path(self):
         flow_estimation= ""
-        #if self.flow_estimation != "":
-        #    flow_estimation = f"_{self.flow_estimation}"
-        return self.save_path() + f"_results{flow_estimation}.csv" 
+        if self.order_books != "":
+            order_books = f"_{self.order_books}"
+        return self.save_path() + f"_results{order_books}.csv" 
     
     def train_dataset_path(self):
         return mu.train_dataset_path(self.dataset_name)
@@ -111,7 +139,7 @@ class ModelWrapper(object):
     
     def test_recalibrated_prediction_path(self, filters=None,inverted_filters=None):
         return mu.test_recalibrated_prediction_path(
-            self.prefix, self.dataset_name, self.flow_estimation,
+            self.prefix, self.dataset_name, self.order_books,
             filters, inverted_filters)
     
     def extra_prediction_path(self):
@@ -125,7 +153,7 @@ class ModelWrapper(object):
 
     def test_recalibrated_shape_path(self):
         return mu.test_recalibrated_shape_path(
-            self.prefix, self.dataset_name, self.flow_estimation)
+            self.prefix, self.dataset_name, self.order_books)
 
     def _params(self, ptemp):
         p = self.params()
@@ -154,6 +182,17 @@ class ModelWrapper(object):
         
         return transformer
 
+    def get_OB_transformer(self, ptemp):
+        try:
+            transformer = DataScaler(ptemp["OB_transformer"], spliter=self.spliter)
+        except:
+            transformer = DataScaler("", spliter=self.spliter)
+            
+        try: del ptemp["OB_transformer"]
+        except: pass
+        
+        return transformer
+    
     def get_search_space(self, fast=False, country=None, version=None, n=None,
                          stop_after=-1):
         pass        
@@ -172,6 +211,8 @@ class ModelWrapper(object):
         if self.countries_to_predict_ == "not_graph":            
             scaler = self.get_scaler(ptemp_)
             transformer = self.get_transformer(ptemp_)
+            OB_transformer = self.get_OB_transformer(ptemp_)            
+            return scaler, transformer,  OB_transformer, ptemp_            
         else:
             node_scaler = self.get_scaler(ptemp_)
             scaler = DataScaler(node_scaler.scaling, psd_idx=self.psd_idx,
@@ -179,10 +220,20 @@ class ModelWrapper(object):
                                 edges_columns_idx=self.edges_columns_idx,
                                 GNN=GNN)
             transformer = self.get_transformer(ptemp_)
-        return scaler, transformer, ptemp_
+            return scaler, transformer, ptemp_
 
     def predict(self, regr, X):
         return regr.predict(X)
+
+    def mae(self, y, yhat):
+        if self.separate_optim:
+            y = y[:, -len(self.label):]
+        return mean_absolute_error(y, yhat)
+
+    def ACC(self, y, yhat):
+        if self.separate_optim:
+            y = y[:, -len(self.label):]
+        return ACC(y, yhat)    
     
     def eval(self, regr, X, y): 
         yhat = self.predict(regr, X)
@@ -351,7 +402,7 @@ class ModelWrapper(object):
         self.label = np.concatenate((price_labels, edge_labels))
 
         # Replace the atcs if specified
-        if self.flow_estimation != "":
+        if self.order_books != "":
             ATC_file = os.path.join(os.environ["MOB"], "data", "datasets",
                                     "OnlyATC", f"joined_{self.flow_estimation}.csv")
             ATCs = pandas.read_csv(ATC_file, index_col="period_start_date")

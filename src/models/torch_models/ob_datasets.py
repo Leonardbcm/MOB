@@ -31,11 +31,13 @@ class EPFDataset(Dataset):
 
     
 class OrderBookDataset(Dataset):
-    def __init__(self, data_folder, datetimes, OBs,
+    def __init__(self, country, data_folder, datetimes, OBs,
                  real_prices = None,
                  niter=30, pmin=-500, pmax=3000, k=100,
                  coerce_size=True, requires_grad=True, dtype=torch.float32):
-        self.data_folder = data_folder
+        self.country = country
+        self.data_folder_ = data_folder
+        self.data_folder = os.path.join(data_folder, country)
         self.real_prices = real_prices
         self.datetimes = datetimes
         self.OBs = OBs
@@ -74,19 +76,19 @@ class OrderBookDataset(Dataset):
         order_book = LoadedOrderBook(date_time, self.data_folder)
 
         if (self.coerce_size_) and (order_book.n > self.OBs):
-            order_book = self.shrink(order_book, idx)
+            try:
+                order_book = self.shrink(order_book, idx)
+            except:
+                raise(Exception("Failed for", date_time))
             
         order_book = TorchOrderBook(
             order_book.orders, requires_grad=self.requires_grad)
         data = order_book.data
 
-        self.coerce_size_ = False
         if (self.coerce_size_) and (data.shape[1] <= self.OBs):
             data = self.extend(data)
-            print("extended")
         else:
             data = data.reshape(-1, 3)
-        self.coerce_size_ = True
         
         return data, torch.tensor(idx)
 

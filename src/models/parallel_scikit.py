@@ -142,8 +142,8 @@ def to_parallelize(i, model, param_list, X, y, n_combis, n_tested,
     try:
         # Evaluate the config.
         yvpred = model.predict_val(regr, Xv, oob=oob)
-        res = mean_absolute_error(yv, yvpred)
-        acc = ACC(yv, yvpred)        
+        res = model.mae(yv, yvpred)
+        acc = model.ACC(yv, yvpred)
         if save_preds:
             pandas.DataFrame(yvpred).to_csv(
                 model.validation_prediction_path(current), index=False)

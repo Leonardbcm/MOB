@@ -141,16 +141,14 @@ loader_times = np.zeros(n)
 for i in range(n):
     start = time.time()
     batch, batch_idx = next(iloader)
-    stop = time.time()    
-    
+    stop = time.time()        
     loader_times[i] = stop - start
 
 dloader_times = np.zeros(n)
 for i in range(n):
     start = time.time()
     dbatch, dbatch_idx = next(idloader)
-    stop = time.time()    
-    
+    stop = time.time()        
     dloader_times[i] = stop - start
 
 results = pandas.DataFrame(columns=["batch", "res", "loader_time", "dloader_time"])

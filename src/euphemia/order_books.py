@@ -109,8 +109,12 @@ class SimpleOrderBook(OrderBook):
         v = self.volumes.sum()
         p1 = self.orders[0].p0
         p2 = self.orders[-1].p0  + self.orders[-1].P
-            
-        return LinearOrder(direction, p1, p2, v)
+
+        if p1 == p2:
+            order = StepOrder(direction, p2, v)
+        else:
+            order = LinearOrder(direction, p1, p2, v)
+        return order
     
     def _curves_fit(self, step=0.01):
         pmin_supply = self.pmin_supply
@@ -173,18 +177,23 @@ class LoadedOrderBook(SimpleOrderBook):
         # Load from data_folder and disagregate
         datetime_str = datetime.datetime.strftime(date_time, "%Y-%m-%d_%Hh")
         supply_volumes = np.load(os.path.join(
-            data_folder, f"{datetime_str}_supply_volumes.npy"))
+            self.data_folder, f"{datetime_str}_supply_volumes.npy"))
         supply_prices = np.load(os.path.join(
-            data_folder, f"{datetime_str}_supply_prices.npy"))
+            self.data_folder, f"{datetime_str}_supply_prices.npy"))
         demand_volumes = np.load(os.path.join(
-            data_folder, f"{datetime_str}_demand_volumes.npy"))
+            self.data_folder, f"{datetime_str}_demand_volumes.npy"))
         demand_prices = np.load(os.path.join(
-            data_folder, f"{datetime_str}_demand_prices.npy"))
+            self.data_folder, f"{datetime_str}_demand_prices.npy"))
+
+        # Revert the demand orders if not correct (NL and BE)
+        if demand_prices[0] > demand_prices[-1]:
+            demand_prices = demand_prices[::-1]
+            demand_volumes = demand_volumes[::-1]        
         
         # Disagregate to form orders
         supply_orders = [StepOrder("Supply", supply_prices[0], supply_volumes[0])]
         demand_orders = [StepOrder("Demand", demand_prices[-1], demand_volumes[-1])]
-
+        
         for volumes, prices, side, container, iteration, operation in zip(
                 [supply_volumes, demand_volumes],
                 [supply_prices, demand_prices],
@@ -193,7 +202,7 @@ class LoadedOrderBook(SimpleOrderBook):
                 [range(len(supply_volumes)-1),range(len(demand_volumes)-1, 0, -1)],
                 [lambda x, y: x + y, lambda x, y: x - y]):
             
-            reset_ptemp = False            
+            reset_ptemp = False
             ptemp = prices[iteration[0]]
             for i in iteration:
                 vi = volumes[i]

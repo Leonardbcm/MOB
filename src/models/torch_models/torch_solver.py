@@ -281,23 +281,11 @@ class BatchDichotomicSolver(Solver):
             self.UB = self.UB - HDM * (self.UB - m)
 
             if self.retain_grad:
-                m.requires_grad_(True)
-                m.retain_grad()
-                
-                HDM.requires_grad_(True)                
-                HDM.retain_grad()
-
-                Dm.requires_grad_(True)                
-                Dm.retain_grad()
-                
-                self.lb.retain_grad()
-                self.ub.retain_grad()
-
                 self.ms += [m]
                 self.HDs += [HDM]
                 self.DMs += [Dm]            
-                self.lbs += [self.lb]
-                self.ubs += [self.ub]
+                self.lbs += [self.LB]
+                self.ubs += [self.UB]
             
             self.steps += 1
 

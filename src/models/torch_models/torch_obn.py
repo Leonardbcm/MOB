@@ -11,39 +11,54 @@ from src.models.torch_models.torch_solver import PFASolver, BatchPFASolver
 class SolvingNetwork(LightningModule):
     def __init__(self, din, NN1, OBs, OB_input, batch_norm, criterion, N_OUTPUT, k,
                  batch_solve, niter, pmin, pmax, step, mV, check_data, transformer,
-                 scale, weight_initializers, profile):
+                 OB_transformer, scale, weight_initializers, profile,
+                 skip_connection, use_order_books, separate_optim, N_PRICES):
         LightningModule.__init__(self)
-        self.NN1_input = list(NN1)
-        
-        # Check that the number of neurons of the last layer of NN1 is reshapable
-        # by 24:
-        if (self.NN1_input[-1] % 24) != 0:
-            raise Exception(f"The last layer of the Feature Extracter can't be reshaped to 24bs x nf : {self.NN1[-1]} % 24 != 0!")
-        
-        self.din = din
-        self.OB_input = list(OB_input)        
-        self.OBs = OBs
-        self.OBs_ = 3 * OBs
-        self.N_OUTPUT = N_OUTPUT
-        self.k = k
-        self.niter = niter
-        self.batch_solve = batch_solve
-        self.batch_norm = batch_norm
-        self.check_data = check_data
-        self.transformer = transformer
 
-        self.pmin = pmin
-        self.pmax = pmax
-        self.step = step
-        self.mV = mV
-        self.scale = scale
+        # Architecture parameters
+        self.skip_connection = skip_connection
+        self.use_order_books = use_order_books
+        self.separate_optim = separate_optim        
+
+        # Network structure parameters
+        self.din = din        
+        self.NN1_input = list(NN1)
+        self.OB_input = list(OB_input)
+        self.OBs = OBs
+        self.N_OUTPUT = N_OUTPUT
+        self.N_PRICES = N_PRICES
+
+        # Other network parameters
+        self.transformer = transformer
+        self.OB_transformer = OB_transformer                
         self.weight_initializers = weight_initializers
         self.OB_weight_initializers = {
             "polayers" : [wi.a_copy() for wi in self.weight_initializers],
             "poplayers" :  [wi.a_copy() for wi in self.weight_initializers]}
+        self.scale = scale                
+        self.batch_norm = batch_norm        
+
+        # Solver parameters
+        self.k = k
+        self.niter = niter
+        self.batch_solve = batch_solve
+        self.pmin = pmin
+        self.pmax = pmax
+        self.step = step
+        self.mV = mV        
+        self.check_data = check_data
+
+        # Training parameters
         self.criterion = criterion
         self.criterion_ = getattr(nn, self.criterion)()
+
+        # Logging parameters
         self.profile = profile
+
+        # Check that the number of neurons of the last layer of NN1 is reshapable
+        # by 24:
+        if (self.NN1_input[-1] % 24) != 0:
+            raise Exception(f"The last layer of the Feature Extracter can't be reshaped to 24bs x nf : {self.NN1[-1]} % 24 != 0!")        
 
         # Update PMIN and PMAX according to the transformer
         self.update_bounds()
@@ -62,6 +77,9 @@ class SolvingNetwork(LightningModule):
                 
         # Create the solver
         self.create_solver()
+
+        # Initialize order book indices
+        self.init_indices()
 
     def construct_network(self):
         ################ Construct the feature extracter NN1
@@ -134,9 +152,9 @@ class SolvingNetwork(LightningModule):
     def update_bounds(self):
         # Compute the Scaled upper and lower bounds
         self.pmin_scaled = self.transformer.transform(
-            self.pmin * np.ones((1, self.N_OUTPUT))).min()
+            self.pmin * np.ones((1, self.N_PRICES))).min()
         self.pmax_scaled = self.transformer.transform(
-            self.pmax * np.ones((1, self.N_OUTPUT))).max()
+            self.pmax * np.ones((1, self.N_PRICES))).max()
         self.step_scaled = (self.pmax_scaled - self.pmin_scaled) / ((self.pmin - self.pmax) / self.step)        
         
     def create_solver(self):
@@ -149,28 +167,73 @@ class SolvingNetwork(LightningModule):
             self.optim_layer = BatchPFASolver(
                 niter=self.niter, pmin=self.pmin, pmax=self.pmax,
                 k=self.k, mV=self.mV, check_data=self.check_data)        
-        
-    def forward(self, x, predict_order_books=False, return_parts=""):
-        ############## 1] Forecast Order Books
+
+    def init_indices(self):
+        if self.skip_connection or self.separate_optim:
+            if self.use_order_books:
+                start = self.din - self.OBs*24*3
+            else:
+                start = self.din
+            
+            self.v_indices = [start + 3*self.OBs*h+i for h in range(24)
+                              for i in range(self.OBs)]
+            self.po_indices = [v + self.OBs for v in self.v_indices]
+            self.p_indices = [po + self.OBs for po in self.po_indices]
+            
+    def forward(self, x, predict_order_books=False, return_parts="",
+                return_skipped=False):
+        # If profiling is specified
         if self.profile:
             self.profile.step()            
-            self.forward_profiled(x)
-                
+            return self.forward_profiled(x)
+
+        ############## 0] Separate OB from predictive data
+        # Save Order books from the data
+        # Separate them if use_order_books is False
+        if self.skip_connection or self.separate_optim:
+            with torch.no_grad():
+                V_skipped = x[:, self.v_indices].reshape(-1, self.OBs)
+                Po_skipped = x[:, self.po_indices].reshape(-1, self.OBs)
+                P_skipped = x[:, self.p_indices].reshape(-1, self.OBs)
+                PoP_skipped = Po_skipped + P_skipped
+
+                if return_skipped:
+                    x_skipped = torch.cat([
+                        V_skipped.reshape(-1, self.OBs, 1),
+                        Po_skipped.reshape(-1, self.OBs, 1),
+                        P_skipped.reshape(-1, self.OBs, 1)], axis=2)
+                    yhat_skipped=self.optim_layer(x_skipped).reshape(
+                        -1, self.N_PRICES)
+            
+                if not self.use_order_books:            
+                    x = x[:, :self.din]
+        
+        ############## 1] Forecast Order Books                
         # Extract features for each day                
         x = self.NN1(x)
 
         # Reshape the data for hourly prediction
         x = x.reshape(-1, self.in_obs)
 
-        # Forecast order books for each hour
+        # Hourly features extractions
         x =  self.OB_layers(x)
 
+        # Forecast elements of the order book : V, Po and P.
         V = self.vlayers(x)
         Po = self.polayers(x)
         PoP = self.poplayers(x)
-        P = PoP - Po
-        
+
+        if return_parts == "step_0":
+            P = PoP - Po            
+            return V, Po, PoP, P               
+
+        if self.skip_connection:
+            V += V_skipped
+            Po += Po_skipped
+            PoP += PoP_skipped        
+                    
         if return_parts == "step_1":
+            P = PoP - Po            
             return V, Po, PoP, P
         
         ############## 2] Fit OB to the domain
@@ -205,7 +268,7 @@ class SolvingNetwork(LightningModule):
         
         ############## 3] Solve the problem(s)
         x = self.optim_layer(x)
-        x = x.reshape(-1, self.N_OUTPUT)
+        x = x.reshape(-1, self.N_PRICES)
         
         return x
 
@@ -234,19 +297,16 @@ class SolvingNetwork(LightningModule):
 
         with record_function("Solver"):            
             x = self.optim_layer(x)
-            x = x.reshape(-1, self.N_OUTPUT)
+            x = x.reshape(-1, self.N_PRICES)
         
         return x    
-
-    def _step(self, batch, batch_idx):
-        x, y = batch
-        xout = self.forward(x)
-        loss = self.criterion_(xout.reshape_as(y), y)
-        bs = int(x.shape[0])
-        return loss, bs
     
     def training_step(self, data, batch_idx):
-        loss, bs = self._step(data, batch_idx)
+        x, y = data
+        xout = self.forward(x, predict_order_books=self.separate_optim)
+        loss = self.criterion_(xout.reshape_as(y), y)
+        bs = int(x.shape[0])
+        
         self.log("train_loss", loss, batch_size=bs, on_epoch=True,
                  prog_bar=True, logger=True)
         self.log("train_percentage_of_demand_orders", self.perc_neg, logger=True)
@@ -255,10 +315,18 @@ class SolvingNetwork(LightningModule):
         return loss
 
     def validation_step(self, data, batch_idx):
-        loss, bs = self._step(data, batch_idx)  
+        x, y = data
+        xout = self.forward(x, predict_order_books=False)
+        loss = self.criterion_(xout.reshape_as(y), y)
+        bs = int(x.shape[0])
+        
         self.log("val_loss", loss, batch_size=bs, logger=True)
-        self.log("val_percentage_of_demand_orders", self.perc_neg, logger=True)        
+        self.log("val_percentage_of_demand_orders", self.perc_neg, logger=True)
         return loss
+
+    def predict_step(self, batch, batch_idx):
+        xout = self.forward(batch, predict_order_books=False)
+        return xout    
     
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=0.001)

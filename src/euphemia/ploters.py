@@ -400,14 +400,13 @@ class SimplePloter(Ploter):
         Ploter.__init__(self, order_book, solver, results)
     
     def display(self, ax_=None, schema=False, colors=None, labels=None,
-                linewidth=2, label_fontsize=20, fontsize=30, alpha=0.5,
+                linewidth=2, label_fontsize=20, fontsize=30, alpha=0.5, step=0.01,
                 fit_to_data=True, **kwargs):
         if ax_ is None:
             fig, ax = plt.subplots(1)
         else:
             ax = ax_
 
-        step = 0.01
         pmin = self.order_book.pmin
         pmax = self.order_book.pmax
 

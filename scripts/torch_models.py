@@ -1,5 +1,6 @@
 %load aimport
 
+import itertools
 from sklearn.metrics import mean_absolute_error
 
 from src.euphemia.orders import *
@@ -9,24 +10,31 @@ from src.euphemia.ploters import *
 
 from src.models.spliter import MySpliter
 from src.models.torch_wrapper import OBNWrapper
+from src.models.torch_models.torch_obn import SolvingNetwork
 from src.models.torch_models.weight_initializers import *
 import src.models.parallel_scikit as ps
 
 ############## Construct model wrapper and load data
 spliter = MySpliter(365, shuffle=False)
-model_wrapper = OBNWrapper("TEST", "Lyon", spliter=spliter)
+model_wrapper = OBNWrapper("TEST", "Munich", tboard="XP", spliter=spliter,
+                           country="DE",
+                           skip_connection=True,
+                           use_order_books=False,
+                           order_book_size=20,
+                           separate_optim=True,)
 X, Y = model_wrapper.load_train_dataset()
+Xt, Yt = model_wrapper.load_test_dataset()
 
 ############## Set some params
 ptemp = model_wrapper.params()
-ptemp["transformer"] = ""
+ptemp["transformer"] = "Standard"
+ptemp["scaler"] = "Standard"
+
+ptemp["shuffle_train"] = False
 ptemp["NN1"] = (888, )
 ptemp["OBN"] = ()
-ptemp["OBs"] = 100
 ptemp["early_stopping"] = None
-ptemp["very_early_stopping"] = True
-ptemp["n_epochs"] = 1
-ptemp["tensorboard"] = "OBN"
+ptemp["n_epochs"] = 5
 ptemp["OB_weight_initializers"] = {
     "polayers" : [BiasInitializer("normal", 30, 40, -500, 3000)],
     "poplayers" : [BiasInitializer("normal", 30, 40, -500, 3000) ]}
@@ -37,7 +45,71 @@ regr = model_wrapper.make(ptemp)
 ps.set_all_seeds(0)
 regr.fit(X, Y)
 yhat = model_wrapper.predict_val(regr, Xv)
-mean_absolute_error(Yv, yhat)
+model_wrapper.mae(Yv, yhat)
+
+model_wrapper.ACC(Yv, yhat)
+
+############## LOAD from a checkpoint and retrain or predict
+ptemp["n_epochs"] = 15
+model_wrapper.load_refit(regr, X, Y, "version_2")
+model_wrapper.load_predict(regr, X, "version_2")
+
+############## Try options
+parameters = {}
+parameters["transformer"] = "Standard"
+parameters["scaler"] = "Standard"
+
+parameters["shuffle_train"] = False
+parameters["NN1"] = (888, )
+parameters["OBN"] = ()
+parameters["early_stopping"] = None
+parameters["n_epochs"] = 1
+parameters["OB_weight_initializers"] = {
+    "polayers" : [BiasInitializer("normal", 30, 40, -500, 3000)],
+    "poplayers" : [BiasInitializer("normal", 30, 40, -500, 3000) ]}
+
+skip_connections = [True, False]
+use_order_books = [True, False]
+separate_optims = [True, False]
+order_book_sizes = [20, 50, 100, 250]
+
+spliter = MySpliter(365, shuffle=False)
+results = pandas.DataFrame(
+    columns=["skip_connection","use_order_book","separate_optim",
+             "order_book_size", "mae"])
+for i, (skip_connection,
+     use_order_book,
+     separate_optim,
+     order_book_size) in enumerate(itertools.product(
+         skip_connections, use_order_books,
+         separate_optims, order_book_sizes)):
+    model_wrapper = OBNWrapper("TEST", "Munich", spliter=spliter, country="DE",
+                               skip_connection=skip_connection,
+                               use_order_books=use_order_book,
+                               order_book_size=order_book_size,
+                               separate_optim=separate_optim)
+    X, Y = model_wrapper.load_train_dataset()
+    Xt, Yt = model_wrapper.load_test_dataset()
+    (Xt, Yt), (Xv, Yv) = model_wrapper.spliter(X, Y)
+
+    ptemp = model_wrapper.params()
+    ptemp.update(parameters)
+    regr = model_wrapper.make(ptemp)
+    ps.set_all_seeds(0)
+    regr.fit(X, Y)
+    yhat = model_wrapper.predict_val(regr, Xv)
+    
+    line = pandas.DataFrame({
+        "skip_connection": skip_connection,
+        "use_order_book": use_order_book,
+        "order_book_size": order_book_size,
+        "separate_optim": separate_optim,
+        "mae" : model_wrapper.mae(Yv, yhat)}, index=[i])
+    results = pandas.concat([results, line], ignore_index=True)
+                
+    
+    
+
 
 # Sample a configuration from the search space
 ps.set_all_seeds(1)

@@ -156,26 +156,6 @@ class StoreLosses(Callback):
         plt.grid("on")
         plt.show()
 
-        
-class EarlyStoppingInitialize(Callback):
-    """
-    Cancels training if the Validation error is too high after the first epoch
-    """
-    def __init__(self, threshold=40):
-        Callback.__init__(self)
-        self.threshold = threshold
-        self.first_epoch = True
-        
-    def on_validation_end(self, trainer, pl_module):
-        if self.first_epoch:
-            current = trainer.callback_metrics["val_loss"]
-            print(f"\nVal loss is {current}\n")
-            if current > self.threshold:
-                print(f"\nNot training the model because initial val loss is {current}\n")
-                trainer.should_stop = True
-                
-        self.first_epoch = False
-        
 
 class EarlyStoppingSlidingAverage(EarlyStopping):
     def __init__(self, monitor="val_loss", verbose=False, alpha=10, patience=10,
