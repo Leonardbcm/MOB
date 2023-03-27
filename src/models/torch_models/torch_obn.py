@@ -1,6 +1,7 @@
 import torch, time, numpy as np
 from pytorch_lightning import LightningModule
 from torch.profiler import profile, record_function, ProfilerActivity
+from torchmetrics import SymmetricMeanAbsolutePercentageError
 from torch import nn
 
 from src.models.torch_models.scalers import TorchMinMaxScaler, TorchCliper
@@ -12,7 +13,8 @@ class SolvingNetwork(LightningModule):
     def __init__(self, din, NN1, OBs, OB_input, batch_norm, criterion, N_OUTPUT, k,
                  batch_solve, niter, pmin, pmax, step, mV, check_data, transformer,
                  OB_transformer, scale, weight_initializers, profile,
-                 skip_connection, use_order_books, separate_optim, N_PRICES):
+                 skip_connection, use_order_books, separate_optim, N_PRICES,
+                 dropout):
         LightningModule.__init__(self)
 
         # Architecture parameters
@@ -27,6 +29,7 @@ class SolvingNetwork(LightningModule):
         self.OBs = OBs
         self.N_OUTPUT = N_OUTPUT
         self.N_PRICES = N_PRICES
+        self.dropout = dropout
 
         # Other network parameters
         self.transformer = transformer
@@ -50,7 +53,10 @@ class SolvingNetwork(LightningModule):
 
         # Training parameters
         self.criterion = criterion
-        self.criterion_ = getattr(nn, self.criterion)()
+        if self.criterion != "smape":
+            self.criterion_ = getattr(nn, self.criterion)()
+        else:
+            self.criterion_ = SymmetricMeanAbsolutePercentageError()
 
         # Logging parameters
         self.profile = profile
@@ -85,9 +91,11 @@ class SolvingNetwork(LightningModule):
         ################ Construct the feature extracter NN1
         nn_layers = []
         for (din, dout) in zip([self.din] + self.NN1_input[:-1], self.NN1_input):
-            if self.batch_norm:
-                nn_layers.append(torch.nn.BatchNorm1d(din))
             nn_layers.append(torch.nn.Linear(din, dout))
+            if self.batch_norm:
+                nn_layers.append(torch.nn.BatchNorm1d(dout))            
+            if self.dropout > 0:
+                nn_layers.append(torch.nn.Dropout(self.dropout))            
             nn_layers.append(torch.nn.ReLU())
         self.NN1 = torch.nn.Sequential(*nn_layers)
 
@@ -99,11 +107,12 @@ class SolvingNetwork(LightningModule):
             self.OB_out = self.OB_input[-1]
             for (din, dout) in zip(
                     [self.in_obs] + self.OB_input[:-1],
-                    self.OB_input):
-                if self.batch_norm:
-                    OB_layers.append(torch.nn.BatchNorm1d(din))
-                
+                    self.OB_input):                
                 OB_layers.append(torch.nn.Linear(din, dout))
+                if self.batch_norm:
+                    OB_layers.append(torch.nn.BatchNorm1d(dout))
+                if self.dropout > 0:
+                    OB_layers.append(torch.nn.Dropout(self.dropout))
                 OB_layers.append(torch.nn.ReLU())
             
         self.OB_layers = torch.nn.Sequential(*OB_layers)        
@@ -129,9 +138,6 @@ class SolvingNetwork(LightningModule):
         containers = {"vlayers" : [], "polayers" : [], "poplayers" : []}       
         for container in containers.keys():
             c_layers = containers[container]
-            if self.batch_norm:
-                c_layers.append(torch.nn.BatchNorm1d(self.OB_out))
-
             forecast_layer = torch.nn.Linear(self.OB_out, self.OBs)
             
             # Special weight init
@@ -303,7 +309,7 @@ class SolvingNetwork(LightningModule):
     
     def training_step(self, data, batch_idx):
         x, y = data
-        xout = self.forward(x, predict_order_books=self.separate_optim)
+        xout = self.forward(x, predict_order_books=self.separate_optim)        
         loss = self.criterion_(xout.reshape_as(y), y)
         bs = int(x.shape[0])
         

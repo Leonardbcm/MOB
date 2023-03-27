@@ -32,7 +32,8 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         self.OBs = model_["OBs"]
         self.N_OUTPUT = model_["N_OUTPUT"]
         self.N_PRICES = model_["N_PRICES"]        
-
+        self.dropout = model_["dropout"]
+        
         # Other network parameters
         self.transformer = model_["transformer"]
         self.OB_transformer = model_["OB_transformer"]        
@@ -200,7 +201,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
                               self.check_data, self.transformer,self.OB_transformer,
                               self.scale, self.weight_initializers, self.profile,
                               self.skip_connection, self.use_order_books,
-                              self.separate_optim, self.N_PRICES)
+                              self.separate_optim, self.N_PRICES, self.dropout)
 
     def split_prices_OB(self, y):
         """

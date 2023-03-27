@@ -6,6 +6,7 @@ from src.models.spliter import MySpliter
 import src.models.model_utils as mu
 from src.models.model_wrapper import *
 from src.models.torch_models.obn import OrderBookNetwork
+from src.models.torch_models.weight_initializers import *
 
 from src.models.samplers.combined_sampler import combined_sampler, list_combined_sampler
 from src.models.samplers.structure_sampler import structure_sampler
@@ -138,22 +139,26 @@ class OBNWrapper(TorchWrapper):
         if self.use_order_books or self.skip_connection or self.separate_optim:
             OBs = self.order_book_size
             
-        return {                       
-            # Network Architecture
+        default_params = {                       
+            # Model Architecture
             "skip_connection" : self.skip_connection,
             "use_order_books" : self.use_order_books,
             "order_book_size" : self.order_book_size,
             "separate_optim" : self.separate_optim,
-            
+
+            # Network architecture
             "N_OUTPUT" : n_output,            
             "N_PRICES" : len(self.label),
             "NN1" : (888, ),
             "OBN" : (37, ),
             "OBs" : OBs,
             "k" : 100,
-            "niter" : 30,
-            "batch_solve" : True, 
+            "niter" : 30, 
             "batch_norm" : True,
+            "dropout" : 0.1,            
+
+            # Solver Parameters
+            "batch_solve" : True,            
             "pmin" : self.pmin,
             "pmax" : self.pmax,
             "step" : 0.01,
@@ -170,10 +175,11 @@ class OBNWrapper(TorchWrapper):
             "log_every_n_steps" : 1,
             
             # Scaling Parameters
-            "scaler" : "BCM",
+            "scaler" : "Standard",
             "transformer" : "Standard",
             "OB_transformer" : "Standard",            
-            "weight_initializers" : [],
+            "weight_initializers" : [BiasInitializer(
+                "normal", 30, 40, self.pmin, self.pmax)],
             "scale" : "Clip-Sign",
 
             # Training Params            
@@ -189,7 +195,14 @@ class OBNWrapper(TorchWrapper):
             # Optimizer Params
             "criterion" : "HuberLoss",
             "n_cpus" : -1,
-        } 
+        }
+                    
+        # Disable WI if skip connection
+        if self.skip_connection:
+            default_params["weight_initializers"] = []
+        if self.separate_optim:
+            default_params["criterion"] = "smape"
+        return default_params
 
     def make(self, ptemp):
         scaler, transformer, OB_transformer, ptemp_ = self.prepare_for_make(ptemp)

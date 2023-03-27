@@ -14,16 +14,23 @@ datasets.
 
 ####### configurations
 skip_connections = [True, False]
-use_order_books = [True, False]
+
+#use_order_books = [True, False]
+use_order_books = [False]
+
 separate_optims = [True, False]
-order_book_sizes = [20, 50, 100, 250]
+
+#order_book_sizes = [20, 50, 100, 250]
+order_book_sizes = [50]
+
 #countries = ["FR", "DE", "BE", "NL"]
-countries = ["FR", "DE", "BE"]
+countries = ["FR"]
+
 #datasets = ["Lyon", "Munich", "Bruges", "Lahaye"]
-datasets = ["Lyon", "Munich", "Bruges"]
+datasets = ["Lyon"]
+
 combinations = list(itertools.product(
     skip_connections, use_order_books, separate_optims, order_book_sizes))
-combinations = combinations[4:]
 ####### Default params
 params = {}
 params["n_epochs"] = 1
@@ -35,7 +42,6 @@ results = pandas.DataFrame(
     columns=["country", "skip_connection", "use_order_book",
              "order_book_size", "separate_optim", "val_mae", "val_ACC",
              "test_mae", "test_ACC", "training_time"])
-
 for i, (skip_connection, use_order_book,  separate_optim,
         order_book_size) in enumerate(combinations):
     for j, (country, dataset) in enumerate(zip(countries, datasets)):
