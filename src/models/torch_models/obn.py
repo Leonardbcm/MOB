@@ -114,7 +114,6 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         self.early_stopping_callbacks()
 
     def create_trainer(self, X, Y=None, verbose=0):
-
         # TRAIN CASE
         if Y is not None:
             # Prepare the data : scale and make datalaoders
@@ -208,7 +207,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         Compute the OB indices based on the specified orderbooksize
         Separate prices and order books from the labels.
         """
-        stop = self.N_PRICES    
+        stop = self.N_PRICES
         OB = y[:, :-stop].copy()
         y = y[:, -stop:].copy()
         return y, OB

@@ -1,6 +1,7 @@
 from scipy import stats
 from sklearn.pipeline import make_pipeline
 from sklearn.compose import TransformedTargetRegressor
+import matplotlib.pyplot as plt, time
 
 from src.models.spliter import MySpliter
 import src.models.model_utils as mu
@@ -50,8 +51,47 @@ class TorchWrapper(ModelWrapper):
             filename = "epoch={epoch}-step={step}.ckpt"
         else:
             checkpoints = os.listdir(path)
-            filename = checkpoints[-1]
+            
+            epochs = []
+            for checkpoint in checkpoints:
+                epochs += [self.stopped_epoch_from_checkpoint(checkpoint)]
+                
+            most_recent = np.argmax(np.array(epochs))
+            filename = checkpoints[most_recent]            
+                
         return filename
+
+    @property
+    def latest_version(self):
+        """
+        Get the most recent version = version with the highest number
+        """
+        path = self.logs_path
+        return os.listdir(path)[-1]
+
+    @property
+    def highest_version(self):
+        """
+        Get the highest version = version with the biggest number of epochs
+        """
+        path = self.logs_path
+        epochs = []
+        versions = os.listdir(path)
+        for version in versions:
+            try:
+                cur_epoch = self.get_stopped_epoch(version)
+            except:
+                cur_epoch = 0
+            epochs += [cur_epoch]
+        ind = np.argmax(np.array(epochs))
+        return versions[ind]
+
+    def get_stopped_epoch(self, version):
+        filename = self.checkpoint_file(self.checkpoint_path(version))
+        return self.stopped_epoch_from_checkpoint(filename)
+        
+    def stopped_epoch_from_checkpoint(self, filename):
+        return int(filename.split('epoch=')[1].split('-step')[0])        
 
     def latest_checkpoint(self, version):
         path = self.checkpoint_path(version)
@@ -78,10 +118,82 @@ class TorchWrapper(ModelWrapper):
         trainer = regr.steps[1][1].trainer
         model = regr.steps[1][1].model        
         yhat = trainer.predict(
-            model, test_loader,ckpt_path=self.latest_checkpoint(version))
-                    
+            model, test_loader,ckpt_path=self.latest_checkpoint(version))           
         
+    def get_real_prices(self, dataset="validation"):
+        if dataset == "validation":
+            X, Y = self.load_train_dataset(OB=False)
+            (_, _), (Xv, Y) = self.spliter(X, Y)
+            _, dates = self.spliter(self.train_dates)
+        else:
+            _, Y = self.load_test_dataset(OB=False)
+            dates =  self.test_dates
+        
+        if self.separate_optim:
+            Y = Y[:, -len(self.label):]    
+    
+        return pandas.DataFrame(Y, index=dates)
 
+    def get_predictions(self, dataset="validation"):
+        if dataset == "validation":
+            path = self.validation_prediction_path()
+        else:
+            path = self.test_prediction_path()
+            
+        try:
+            ypred = pandas.read_csv(path, index_col="Unnamed: 0")
+        except:
+            return None
+        ypred.index = [datetime.datetime.strptime(d, "%Y-%m-%d")
+                       for d in ypred.index]
+        ypred.index = [datetime.date(d.year, d.month, d.day) for d in ypred.index]
+        return ypred
+
+    def plot_forecasts(self, dataset="validation"):
+        # Plot forecasts
+        ypred = self.get_predictions(dataset=dataset)
+        ytrue = self.get_real_prices(dataset=dataset)
+        
+        plt.plot(ypred.values.reshape(-1), label="Predictions")
+        plt.plot(ytrue.values.reshape(-1), label="Real Prices")
+        plt.legend()
+        plt.grid("on")
+        plt.title(f"{self.ID} {dataset} results")
+        plt.show()        
+
+    def compute_metrics(self):
+        # Reload predictions
+        validation_predictions = self.get_predictions()
+        test_predictions = self.get_predictions(dataset="test")
+
+        if validation_predictions is None or test_predictions is None:
+            return {}
+        
+        # Reload real prices
+        validation_prices = self.get_real_prices()
+        test_prices = self.get_real_prices(dataset="test")      
+        line = {
+            "country" : self.country,
+            "skip_connection" : self.skip_connection,
+            "use_order_book" : self.use_order_books,
+            "order_book_size" : self.order_book_size,
+            "separate_optim" : self.separate_optim,
+            "val_mae" : self.mae(
+                validation_prices.values, validation_predictions.values),
+            "val_dae" : self.dae(
+                validation_prices.values, validation_predictions.values),
+            "val_smape" : self.smape(
+                validation_prices.values, validation_predictions.values),
+            "val_ACC" : self.ACC(
+                validation_prices.values, validation_predictions.values),
+            "test_mae" : self.mae(test_prices.values, test_predictions.values),
+            "test_dae" : self.dae(test_prices.values, test_predictions.values),
+            "test_smape" : self.smape(test_prices.values, test_predictions.values),
+            "test_ACC" : self.ACC(test_prices.values, test_predictions.values)    
+        }
+        return line
+
+        
 class OBNWrapper(TorchWrapper):
     """
     Wrapper for all predict order books then optimize models
@@ -153,7 +265,7 @@ class OBNWrapper(TorchWrapper):
             "OBN" : (37, ),
             "OBs" : OBs,
             "k" : 100,
-            "niter" : 30, 
+            "niter" : 20, 
             "batch_norm" : True,
             "dropout" : 0.1,            
 
@@ -199,9 +311,14 @@ class OBNWrapper(TorchWrapper):
                     
         # Disable WI if skip connection
         if self.skip_connection:
+            print("Disabling weight_initializers because skip_connection=True")
             default_params["weight_initializers"] = []
         if self.separate_optim:
+            print("Using SMAP loss because separate_otpim=True")
             default_params["criterion"] = "smape"
+        if (not self.skip_connection) and (not self.use_order_books) and (not self.separate_optim):
+            print("Using the BCM transformer because skip_connection=False, use_order_book=False, separate_optim=False")
+            default_params["transformer"] = "BCM"
         return default_params
 
     def make(self, ptemp):
@@ -268,7 +385,7 @@ class OBNWrapper(TorchWrapper):
         })
         return orig
 
-    def _load_dataset(self, path, dataset):
+    def _load_dataset(self, path, dataset, OB=True):
         # Load regular data        
         df = pandas.read_csv(path)
         datetimes = [datetime.datetime.strptime(
@@ -284,7 +401,8 @@ class OBNWrapper(TorchWrapper):
             self.test_dates = np.array(dates)
         
         # load OB if needed
-        if self.skip_connection or self.use_order_books or self.separate_optim:
+        if (self.skip_connection or self.use_order_books
+            or self.separate_optim) and OB:
             order_book_path = os.path.join(
                 os.environ["MOB"],"curves",
                 f"{self.country}_{self.order_book_size}.csv")
@@ -321,11 +439,11 @@ class OBNWrapper(TorchWrapper):
             X = df.drop(columns=self.label).values
         return X, Y
 
-    def load_train_dataset(self):
-        return self._load_dataset(self.train_dataset_path(), "train")
+    def load_train_dataset(self, OB=True):
+        return self._load_dataset(self.train_dataset_path(), "train", OB=OB)
     
-    def load_test_dataset(self):
-        return self._load_dataset(self.test_dataset_path(), "test")
+    def load_test_dataset(self, OB=True):
+        return self._load_dataset(self.test_dataset_path(), "test", OB=OB)
 
     def predict_order_books(self, regr, X):
         model = regr.steps[1][1]

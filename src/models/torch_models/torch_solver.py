@@ -1,11 +1,11 @@
-import torch
+import torch, numpy as np
 from torch import nn
 
 class Solver(nn.Module):
     """
     Abstract class for all solver : Single And Batch
     """
-    def __init__(self, lb, ub, k=30, mV=0.1, retain_grad=False,
+    def __init__(self, lb, ub, k=30, mV=0.1,
                  dtype=torch.float32, check_data=True):
         nn.Module.__init__(self)
 
@@ -13,7 +13,6 @@ class Solver(nn.Module):
         self.lb_ = lb
         self.k = k
         self.mV = mV
-        self.retain_grad = retain_grad
         self.check_data_ = check_data
         self.dtype = dtype
 
@@ -68,9 +67,9 @@ class DichotomicSolver(Solver):
     To use this class, create a sub-class that inherit the forward method and 
     implements the dual_derivative method.
     """
-    def __init__(self, lb, ub, step, k=30, mV=0.1, retain_grad=False,
+    def __init__(self, lb, ub, step, k=30, mV=0.1,
                  dtype=torch.float32, check_data=True):
-        Solver.__init__(self, lb, ub, k=k, mV=mV, retain_grad=retain_grad,
+        Solver.__init__(self, lb, ub, k=k, mV=mV,
                         dtype=dtype, check_data=check_data)
         self.step = step        
         self.init_parameters()        
@@ -80,18 +79,15 @@ class DichotomicSolver(Solver):
         self.steps = 0
         
         # Create the lower and upper bounds
-        self.lb = torch.tensor(
-            self.lb_,dtype=self.dtype, requires_grad=self.retain_grad)
-        self.ub = torch.tensor(
-            self.ub_,dtype=self.dtype, requires_grad=self.retain_grad)
+        self.lb = torch.tensor(self.lb_,dtype=self.dtype)
+        self.ub = torch.tensor(self.ub_,dtype=self.dtype)
 
         # Intialize gradient containers
-        if self.retain_grad:
-            self.lbs = []
-            self.ubs = []
-            self.ms = []        
-            self.HDs = []
-            self.DMs = []        
+        self.lbs = []
+        self.ubs = []
+        self.ms = []        
+        self.HDs = []
+        self.DMs = []        
 
     def forward(self, x):
         """ 
@@ -123,24 +119,11 @@ class DichotomicSolver(Solver):
             self.lb = m - HDM * (m - self.lb)            
             self.ub = self.ub - HDM * (self.ub - m)
 
-            if self.retain_grad:
-                m.requires_grad_(True)
-                m.retain_grad()
-                
-                HDM.requires_grad_(True)                
-                HDM.retain_grad()
-
-                Dm.requires_grad_(True)                
-                Dm.retain_grad()
-                
-                self.lb.retain_grad()
-                self.ub.retain_grad()
-
-                self.ms += [m]
-                self.HDs += [HDM]
-                self.DMs += [Dm]            
-                self.lbs += [self.lb]
-                self.ubs += [self.ub]
+            self.ms += [m]
+            self.HDs += [HDM]
+            self.DMs += [Dm]            
+            self.lbs += [self.lb]
+            self.ubs += [self.ub]
             
             self.steps += 1
 
@@ -156,10 +139,9 @@ class PFASolver(DichotomicSolver):
     derivative of the dual problem of euphemia whose solution is the day ahead price
     """
     def __init__(self, pmin=-500, pmax=3000, step=0.01, k=30, mV=0.1,
-                 retain_grad=False, check_data=True):
+                 check_data=True):
         DichotomicSolver.__init__(
-            self, pmin, pmax, step, k, mV=mV, retain_grad=retain_grad,
-            check_data=check_data)
+            self, pmin, pmax, step, k, mV=mV, check_data=check_data)
         self.pmin = pmin
         self.pmax = pmax        
 
@@ -227,30 +209,32 @@ class BatchDichotomicSolver(Solver):
     To use this class, create a sub-class that inherit the forward method and 
     implements the dual_derivative method.
     """
-    def __init__(self, niter, lb, ub, k=30, mV=0.1, retain_grad=False,
+    def __init__(self, niter, lb, ub, k=30, mV=0.1,
                  dtype=torch.float32, check_data=False):
-        Solver.__init__(self, lb, ub, k=k, mV=mV, retain_grad=retain_grad,
+        Solver.__init__(self, lb, ub, k=k, mV=mV,
                         dtype=dtype, check_data=check_data)
         self.niter = niter        
 
     def init_parameters(self, bs):
+        """
+        Prepare the solver to solve a batch of data :
+        -reset the current step
+        -initialize the upper and lower bounds
+        """
+        
         # Counts the number of steps
         self.steps = 0
         
         # Create the lower and upper bounds
-        self.LB = self.lb_ * torch.ones(
-            (bs, 1), dtype=self.dtype, requires_grad=self.retain_grad)
+        self.LB = self.lb_ * torch.ones((bs, 1), dtype=self.dtype)
+        self.UB = self.ub_ * torch.ones((bs, 1), dtype=self.dtype)
         
-        self.UB = self.ub_ * torch.ones(
-            (bs, 1), dtype=self.dtype, requires_grad=self.retain_grad)
-        
-        # Intialize gradient containers
-        if self.retain_grad:
-            self.lbs = []
-            self.ubs = []
-            self.ms = []        
-            self.HDs = []
-            self.DMs = []        
+        # Intialize containers
+        self.lbs = np.zeros((self.niter, bs))
+        self.ubs = np.zeros((self.niter, bs))
+        self.ms = np.zeros((self.niter, bs))
+        self.HDs = np.zeros((self.niter, bs))
+        self.DMs = np.zeros((self.niter, bs))
 
     def forward(self, x):
         """ 
@@ -280,12 +264,12 @@ class BatchDichotomicSolver(Solver):
             self.LB = m - HDM * (m - self.LB)
             self.UB = self.UB - HDM * (self.UB - m)
 
-            if self.retain_grad:
-                self.ms += [m]
-                self.HDs += [HDM]
-                self.DMs += [Dm]            
-                self.lbs += [self.LB]
-                self.ubs += [self.UB]
+            with torch.no_grad():
+                self.ms[i, :] = m.reshape(-1)
+                self.HDs[i, :] = HDM.reshape(-1)
+                self.DMs[i, :] = Dm.reshape(-1)
+                self.lbs[i, :] = self.LB.reshape(-1)
+                self.ubs[i, :] = self.UB.reshape(-1)
             
             self.steps += 1
 
@@ -304,11 +288,19 @@ class BatchPFASolver(BatchDichotomicSolver):
     Problems are solved indenpendantly but at the same time.
     """
     def __init__(self, niter=20, pmin=-500, pmax=3000, k=30, mV=0.1,
-                 retain_grad=False, check_data=False):
+                 check_data=False):
         BatchDichotomicSolver.__init__(self, niter, pmin,pmax,k,mV,
-                                       retain_grad,check_data=check_data)
+                                       check_data=check_data)
         self.pmin = pmin
         self.pmax = pmax
+
+    def __repr__(self):
+        return self.__str__()
+        
+    def __str__(self):
+        s=f"BatchPFASolver({self.lb_}=>{self.ub_}, k={self.k}, {self.niter} iter)"
+        return s
+        
             
     def separate_data(self, data):
         """

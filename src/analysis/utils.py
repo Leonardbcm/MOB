@@ -1,3 +1,4 @@
+from src.models.torch_wrapper import OBNWrapper
 import pandas, os, datetime
 
 def load_real_prices(country, n=None):
@@ -19,3 +20,14 @@ def load_real_prices(country, n=None):
         return df
     else:
         return df.head(n)
+    
+def get_model_wrappers(combinations, countries, datasets, spliter):
+    model_wrappers = []
+    for i, (skip_connection, use_order_book,  separate_optim, order_book_size) in enumerate(combinations):
+        for j, (country, dataset) in enumerate(zip(countries, datasets)):
+            model_wrapper = OBNWrapper(
+                "TEST", dataset, spliter=spliter, country=country,
+                skip_connection=skip_connection, use_order_books=use_order_book,
+                order_book_size=order_book_size, separate_optim=separate_optim)
+            model_wrappers += [model_wrapper]
+    return model_wrappers

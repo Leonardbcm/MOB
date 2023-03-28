@@ -90,20 +90,21 @@ class Initializer(object):
         layer.(self.attribute).data.(self.fname)_(p1, p2)
         """
         data = getattr(layer, self.attribute).data
-        
-        fanin = layer.in_features
-        fanout = layer.out_features
-        
-        if self.fname == "normal":
-            data.normal_(mean=self.p1, std=self.p2)            
-        if self.fname == "uniform":
-            data.uniform_(a=self.p1, b=self.p2)
+
+        with torch.no_grad():
+            if self.fname == "normal":
+                data.normal_(mean=self.p1, std=self.p2)            
+            if self.fname == "uniform":
+                data.uniform_(a=self.p1, b=self.p2)
+
+        print(f"Initializing {layer} {self.attribute} using {self._str()}")
 
     def update(self, transformer):
         """
         Transform attributes of this object using the given transformer.
         """
         if transformer.scaling != '':
+            print(f"Disabling Weight initialization since transformer={transfomer.scaling}")
             self.p1 = 0
             self.p2 = 1
 
@@ -126,6 +127,9 @@ class Initializer(object):
         return Initializer(self.fname, self.attribute,
                            self.p1, self.p2, scale_infeatures=self.scale_infeatures)
 
+    def __repr__(self):
+        return self._str(round_=True)
+    
     def __str__(self):
         return self._str(round_=False)
 
@@ -145,17 +149,16 @@ class BiasInitializer(Initializer):
     def __call__(self, layer):
         data = getattr(layer, self.attribute).data
         
-        fanin = layer.in_features
-        fanout = layer.out_features
-        
-        if self.fname == "normal":
-            data.normal_(mean=self.p1, std=self.p2)            
-        if self.fname == "uniform":
-            data.uniform_(a=self.p1, b=self.p2)
-
         with torch.no_grad():
+            if self.fname == "normal":
+                data.normal_(mean=self.p1, std=self.p2)            
+            if self.fname == "uniform":
+                data.uniform_(a=self.p1, b=self.p2)
+            
             data[0] = self.pmin
             data[-1] = self.pmax
+ 
+        print(f"Initializing {layer} {self.attribute} using {self._str()}")
 
     def update(self, transformer):
         """
@@ -164,6 +167,8 @@ class BiasInitializer(Initializer):
         """        
         # New data distribution is mean = 0, std = 1!!
         if transformer.scaling != '':
+            print(f"Disabling Weight initialization since transformer={transformer.scaling}")
+            
             self.p1 = 0
             self.p2 = 1  
         
@@ -194,7 +199,10 @@ class BiasInitializer(Initializer):
             pmaxs = round(pmaxs, ndigits=2)            
 
         s += f"{fnamestr}{self.p1}, {self.p2}), {self.pmin}, {self.pmax})"
-        return s    
+        return s
+
+    def __repr__(self):
+        return self._str(round_=True)    
             
     def __str__(self):        
         return self._str(round_=False)

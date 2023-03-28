@@ -16,39 +16,45 @@ import src.models.parallel_scikit as ps
 
 ############## Construct model wrapper and load data
 spliter = MySpliter(365, shuffle=False)
-model_wrapper = OBNWrapper("TEST", "Munich", tboard="XP", spliter=spliter,
-                           country="DE",
-                           skip_connection=True,
-                           use_order_books=False,
-                           order_book_size=20,
-                           separate_optim=True,)
+model_wrapper = OBNWrapper("TEST", "Lyon", country="FR", spliter=spliter,
+                           skip_connection=False,  use_order_books=False,
+                           order_book_size=20, separate_optim=False)
 X, Y = model_wrapper.load_train_dataset()
-Xt, Yt = model_wrapper.load_test_dataset()
-
 ############## Set some params
 ptemp = model_wrapper.params()
-ptemp["transformer"] = "Standard"
-ptemp["scaler"] = "Standard"
-
-ptemp["shuffle_train"] = False
-ptemp["NN1"] = (888, )
-ptemp["OBN"] = ()
+ptemp["transformer"] = "BCM"
 ptemp["early_stopping"] = None
 ptemp["n_epochs"] = 5
-ptemp["OB_weight_initializers"] = {
-    "polayers" : [BiasInitializer("normal", 30, 40, -500, 3000)],
-    "poplayers" : [BiasInitializer("normal", 30, 40, -500, 3000) ]}
+ptemp["weight_initializers"] = [BiasInitializer("normal", 30, 40, -500, 3000)]
+ptemp["scale"] = "Clip-Sign"
 regr = model_wrapper.make(ptemp)
-(Xt, Yt), (Xv, Yv) = model_wrapper.spliter(X, Y)
+(Xtr, Ytr), (Xv, Yv) = model_wrapper.spliter(X, Y)
 
 ############## Fit model and predict validation set
 ps.set_all_seeds(0)
+print(model_wrapper.logs_path)
 regr.fit(X, Y)
 yhat = model_wrapper.predict_val(regr, Xv)
+np.abs(regr.steps[1][1].model.duals).mean()
 model_wrapper.mae(Yv, yhat)
-
+model_wrapper.smape(Yv, yhat)
 model_wrapper.ACC(Yv, yhat)
 
+# Test set
+Xt, Yt = model_wrapper.load_test_dataset()
+ythat = model_wrapper.predict_test(regr, Xt)
+np.abs(regr.steps[1][1].model.duals).mean()
+model_wrapper.smape(Yt, ythat)
+
+############## Datasets
+for y, l, c in zip([Ytr, Yv, Yt], ["train", "validation", "test"], ["b", "r", "g"]):
+    mean = y.mean(axis=0)
+    plt.plot(mean, label=l, color=c)
+    std = y.std(axis=0)
+    plt.plot(mean - std, label=l, color=c)
+    plt.plot(mean + std, label=l, color=c)
+plt.legend()
+plt.show()
 ############## LOAD from a checkpoint and retrain or predict
 ptemp["n_epochs"] = 15
 model_wrapper.load_refit(regr, X, Y, "version_2")
@@ -106,10 +112,6 @@ for i, (skip_connection,
         "separate_optim": separate_optim,
         "mae" : model_wrapper.mae(Yv, yhat)}, index=[i])
     results = pandas.concat([results, line], ignore_index=True)
-                
-    
-    
-
 
 # Sample a configuration from the search space
 ps.set_all_seeds(1)

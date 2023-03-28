@@ -93,10 +93,11 @@ class SolvingNetwork(LightningModule):
         for (din, dout) in zip([self.din] + self.NN1_input[:-1], self.NN1_input):
             nn_layers.append(torch.nn.Linear(din, dout))
             if self.batch_norm:
-                nn_layers.append(torch.nn.BatchNorm1d(dout))            
+                nn_layers.append(torch.nn.BatchNorm1d(dout))
             if self.dropout > 0:
-                nn_layers.append(torch.nn.Dropout(self.dropout))            
-            nn_layers.append(torch.nn.ReLU())
+                nn_layers.append(torch.nn.Dropout(self.dropout))
+            nn_layers.append(torch.nn.ReLU())                
+
         self.NN1 = torch.nn.Sequential(*nn_layers)
 
         self.in_obs = int(self.NN1_input[-1] / 24)
@@ -161,7 +162,9 @@ class SolvingNetwork(LightningModule):
             self.pmin * np.ones((1, self.N_PRICES))).min()
         self.pmax_scaled = self.transformer.transform(
             self.pmax * np.ones((1, self.N_PRICES))).max()
-        self.step_scaled = (self.pmax_scaled - self.pmin_scaled) / ((self.pmin - self.pmax) / self.step)        
+        self.step_scaled = (self.pmax_scaled - self.pmin_scaled) / ((self.pmax - self.pmin) / self.step)        
+
+        print(f"Updated search bounds : {self.pmin}->{self.pmin_scaled},{self.pmax}->{self.pmax_scaled}")
         
     def create_solver(self):
         ################# Construct the Solver        
@@ -171,7 +174,7 @@ class SolvingNetwork(LightningModule):
                 k=self.k,mV=self.mV, check_data=self.check_data)
         else:
             self.optim_layer = BatchPFASolver(
-                niter=self.niter, pmin=self.pmin, pmax=self.pmax,
+                niter=self.niter, pmin=self.pmin_scaled, pmax=self.pmax_scaled,
                 k=self.k, mV=self.mV, check_data=self.check_data)        
 
     def init_indices(self):
@@ -262,7 +265,7 @@ class SolvingNetwork(LightningModule):
             
         # () Store the percentage of demand orders for analysis
         self.perc_neg = 100 * torch.mean(torch.where(P < 0, 1.0, 0.0))
-
+        
         # d) Reconstruct the OB        
         x = torch.cat([
             V.reshape(-1, self.OBs, 1),
@@ -275,6 +278,13 @@ class SolvingNetwork(LightningModule):
         ############## 3] Solve the problem(s)
         x = self.optim_layer(x)
         x = x.reshape(-1, self.N_PRICES)
+
+        # Log the values of the dual problem
+        final_duals = torch.tensor(self.optim_layer.DMs[self.optim_layer.steps-1,:])
+        self.final_duals = final_duals
+        self.perc_solved = 100 * torch.mean(torch.where(
+            torch.abs(self.final_duals) < 0.01, 1.0, 0.0))        
+        self.remaining_unsolved = torch.sum(torch.abs(self.final_duals))
         
         return x
 
@@ -316,8 +326,10 @@ class SolvingNetwork(LightningModule):
         self.log("train_loss", loss, batch_size=bs, on_epoch=True,
                  prog_bar=True, logger=True)
         self.log("train_percentage_of_demand_orders", self.perc_neg, logger=True)
-        self.log("pmin_scaled", self.pmin_scaled, logger=True)
-        self.log("pmax_scaled", self.pmax_scaled, logger=True)        
+        self.log("train_unsolved_problems", self.remaining_unsolved,
+                 logger=True)        
+        self.log("train_percentage_of_solved_problems", self.perc_solved,
+                 logger=True)
         return loss
 
     def validation_step(self, data, batch_idx):
@@ -328,11 +340,22 @@ class SolvingNetwork(LightningModule):
         
         self.log("val_loss", loss, batch_size=bs, logger=True)
         self.log("val_percentage_of_demand_orders", self.perc_neg, logger=True)
+        self.log("val_unsolved_problems", self.remaining_unsolved,
+                 logger=True)        
+        self.log("val_percentage_of_solved_problems", self.perc_solved,
+                 logger=True)        
         return loss
 
+    def on_predict_start(self):
+        self.duals = []
+    
     def predict_step(self, batch, batch_idx):
         xout = self.forward(batch, predict_order_books=False)
-        return xout    
+        self.duals += list(self.final_duals.numpy())
+        return xout
+    
+    def on_predict_end(self):
+        self.duals = np.array(self.duals).reshape(-1, 24)
     
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=0.001)

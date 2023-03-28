@@ -225,6 +225,16 @@ class ModelWrapper(object):
     def predict(self, regr, X):
         return regr.predict(X)
 
+    def smape(self, y, yhat):
+        if self.separate_optim:
+            y = y[:, -len(self.label):]
+        return smape(y, yhat)
+
+    def dae(self, y, yhat):
+        if self.separate_optim:
+            y = y[:, -len(self.label):]
+        return dae(y, yhat)    
+
     def mae(self, y, yhat):
         if self.separate_optim:
             y = y[:, -len(self.label):]

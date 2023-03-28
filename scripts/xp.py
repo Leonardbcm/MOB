@@ -1,5 +1,3 @@
-%load aimport
-
 import itertools, pandas, numpy as np, time
 
 from src.models.spliter import MySpliter
@@ -13,21 +11,23 @@ datasets.
 """
 
 ####### configurations
-skip_connections = [True, False]
+#skip_connections = [True, False]
+skip_connections = [False]
 
 #use_order_books = [True, False]
 use_order_books = [False]
 
-separate_optims = [True, False]
+#separate_optims = [True, False]
+separate_optims = [False]
 
 #order_book_sizes = [20, 50, 100, 250]
-order_book_sizes = [50]
+order_book_sizes = [20, 50, 100]
 
 #countries = ["FR", "DE", "BE", "NL"]
-countries = ["FR"]
+countries = ["FR", "DE"]
 
 #datasets = ["Lyon", "Munich", "Bruges", "Lahaye"]
-datasets = ["Lyon"]
+datasets = ["Lyon", "Munich"]
 
 combinations = list(itertools.product(
     skip_connections, use_order_books, separate_optims, order_book_sizes))
@@ -40,10 +40,11 @@ spliter = MySpliter(365, shuffle=False)
 n = len(skip_connections) * len(use_order_books) * len(separate_optims) * len(order_book_sizes)
 results = pandas.DataFrame(
     columns=["country", "skip_connection", "use_order_book",
-             "order_book_size", "separate_optim", "val_mae", "val_ACC",
-             "test_mae", "test_ACC", "training_time"])
-for i, (skip_connection, use_order_book,  separate_optim,
-        order_book_size) in enumerate(combinations):
+             "order_book_size", "separate_optim",
+             "val_mae", "val_smape", "val_ACC",
+             "test_mae", "test_smape", "test_ACC",
+             "training_time"])
+for i, (skip_connection, use_order_book,  separate_optim, order_book_size) in enumerate(combinations):
     for j, (country, dataset) in enumerate(zip(countries, datasets)):
         model_wrapper = OBNWrapper(
             "TEST", dataset, spliter=spliter, country=country,
@@ -66,7 +67,8 @@ for i, (skip_connection, use_order_book,  separate_optim,
 
         # Predict validation data and compute errors
         yvpred = model_wrapper.predict_val(regr, Xv)
-        v_res = model_wrapper.mae(Yv, yvpred)
+        v_mae = model_wrapper.mae(Yv, yvpred)
+        v_smape = model_wrapper.smape(Yv, yvpred)        
         v_acc = model_wrapper.ACC(Yv, yvpred)
 
         # Save validation data
@@ -79,7 +81,8 @@ for i, (skip_connection, use_order_book,  separate_optim,
 
         # Predict test data and compute errors
         ytpred = model_wrapper.predict_test(regr, Xt)
-        t_res = model_wrapper.mae(Yt, ytpred)
+        t_mae = model_wrapper.mae(Yt, ytpred)
+        t_smape = model_wrapper.smape(Yt, ytpred)        
         t_acc = model_wrapper.ACC(Yt, ytpred)
 
         # Save test forecasts
@@ -93,9 +96,11 @@ for i, (skip_connection, use_order_book,  separate_optim,
             "use_order_book": use_order_book,
             "order_book_size": order_book_size,
             "separate_optim": separate_optim,
-            "val_mae" : v_res,
+            "val_mae" : v_mae,
+            "val_smape" : v_smape,            
             "val_ACC" : v_acc,
-            "test_mae" : t_res,
+            "test_mae" : t_mae,
+            "test_smape" : t_smape,                        
             "test_ACC" : t_acc,
             "training_time" : stop - start,            
         }, index = [n * j + i])

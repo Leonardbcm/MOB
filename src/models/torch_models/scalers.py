@@ -30,7 +30,10 @@ class TorchMinMaxScaler(nn.Module):
     def __str__(self):
         a_round = round(self.a, ndigits=2)
         b_round = round(self.b, ndigits=2)        
-        return f"TorchMinMaxScaler({a_round}, {b_round})"    
+        return f"TorchMinMaxScaler({a_round}, {b_round})"
+
+    def __repr__(self):
+        return self.__str__()
         
         
 class TorchMinAbsScaler(nn.Module):
@@ -70,6 +73,9 @@ class TorchCliper(nn.Module):
         a_round = round(self.a, ndigits=2)
         b_round = round(self.b, ndigits=2)        
         return f"TorchCliper({a_round}, {b_round})"
+
+    def __repr__(self):
+        return self.__str__()    
 
     
 class AbsCliper(nn.Module):

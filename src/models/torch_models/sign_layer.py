@@ -56,7 +56,10 @@ class SignLayer(nn.Module):
             return self.forward_(P, V)
 
     def __str__(self):
-        return f"SignLayer({self.scale}, {self.k})"
+        return f"SignLayer({self.scale}, k={self.k})"
+
+    def __repr__(self):
+        return self.__str__()    
 
 if __name__ == "__main__":
     def signs(P, V):
