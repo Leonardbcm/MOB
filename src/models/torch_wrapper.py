@@ -289,11 +289,11 @@ class OBNWrapper(TorchWrapper):
             # Scaling Parameters
             "scaler" : "Standard",
             "transformer" : "Standard",
-            "OB_transformer" : "Standard",            
+            "V_transformer" : "Standard",            
             "weight_initializers" : [BiasInitializer(
                 "normal", 30, 40, self.pmin, self.pmax)],
             "scale" : "Clip-Sign",
-
+            
             # Training Params            
             "spliter" : self.spliter,
             "n_epochs" : 1000,
@@ -314,17 +314,14 @@ class OBNWrapper(TorchWrapper):
             print("Disabling weight_initializers because skip_connection=True")
             default_params["weight_initializers"] = []
         if self.separate_optim:
-            print("Using SMAP loss because separate_otpim=True")
+            print("Using SMAPE loss because separate_otpim=True")
             default_params["criterion"] = "smape"
-        if (not self.skip_connection) and (not self.use_order_books) and (not self.separate_optim):
-            print("Using the BCM transformer because skip_connection=False, use_order_book=False, separate_optim=False")
-            default_params["transformer"] = "BCM"
         return default_params
 
     def make(self, ptemp):
-        scaler, transformer, OB_transformer, ptemp_ = self.prepare_for_make(ptemp)
+        scaler, transformer, V_transformer, ptemp_ = self.prepare_for_make(ptemp)
         ptemp_["transformer"] = transformer
-        ptemp_["OB_transformer"] = OB_transformer        
+        ptemp_["V_transformer"] = V_transformer        
         
         # OBN need to access the scalers for scaling OBN
         model = OrderBookNetwork("test", ptemp_)

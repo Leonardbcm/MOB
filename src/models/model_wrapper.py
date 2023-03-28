@@ -182,13 +182,13 @@ class ModelWrapper(object):
         
         return transformer
 
-    def get_OB_transformer(self, ptemp):
+    def get_V_transformer(self, ptemp):
         try:
-            transformer = DataScaler(ptemp["OB_transformer"], spliter=self.spliter)
+            transformer = DataScaler(ptemp["V_transformer"], spliter=self.spliter)
         except:
             transformer = DataScaler("", spliter=self.spliter)
             
-        try: del ptemp["OB_transformer"]
+        try: del ptemp["V_transformer"]
         except: pass
         
         return transformer
@@ -211,8 +211,8 @@ class ModelWrapper(object):
         if self.countries_to_predict_ == "not_graph":            
             scaler = self.get_scaler(ptemp_)
             transformer = self.get_transformer(ptemp_)
-            OB_transformer = self.get_OB_transformer(ptemp_)            
-            return scaler, transformer,  OB_transformer, ptemp_            
+            V_transformer = self.get_V_transformer(ptemp_)            
+            return scaler, transformer,  V_transformer, ptemp_            
         else:
             node_scaler = self.get_scaler(ptemp_)
             scaler = DataScaler(node_scaler.scaling, psd_idx=self.psd_idx,

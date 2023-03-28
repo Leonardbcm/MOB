@@ -36,7 +36,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         
         # Other network parameters
         self.transformer = model_["transformer"]
-        self.OB_transformer = model_["OB_transformer"]        
+        self.V_transformer = model_["V_transformer"]        
         self.weight_initializers = model_["weight_initializers"]    
         self.scale = model_["scale"]        
         self.batch_norm = model_["batch_norm"]        
@@ -197,20 +197,58 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
                               self.batch_norm, self.criterion,
                               self.N_OUTPUT, self.k, self.batch_solve, self.niter,
                               self.pmin, self.pmax, self.step, self.mV,
-                              self.check_data, self.transformer,self.OB_transformer,
+                              self.check_data, self.transformer,self.V_transformer,
                               self.scale, self.weight_initializers, self.profile,
                               self.skip_connection, self.use_order_books,
                               self.separate_optim, self.N_PRICES, self.dropout)
 
+    def init_indices(self):
+        if self.skip_connection or self.separate_optim:
+            start = 0
+            
+            self.v_indices = [start + 3*self.OBs*h+i for h in range(24)
+                              for i in range(self.OBs)]
+            self.po_indices = [v + self.OBs for v in self.v_indices]
+            self.p_indices = [po + self.OBs for po in self.po_indices]
+    
     def split_prices_OB(self, y):
         """
         Compute the OB indices based on the specified orderbooksize
         Separate prices and order books from the labels.
+        Also splits the OB into its components : V, Po, P.
         """
+        
         stop = self.N_PRICES
         OB = y[:, :-stop].copy()
         y = y[:, -stop:].copy()
-        return y, OB
+
+        self.init_indices()
+        V = OB[:, self.v_indices]
+        Po = OB[:, self.po_indices]
+        P = OB[:, self.p_indices]
+
+        # Reshape Po and Pr so they fit in the scalers!
+        nx = OB.shape[0]
+        Por = np.zeros((nx * self.OBs, 24))
+        Pr = np.zeros((nx * self.OBs, 24))
+        for h in range(24):
+            Por[:, h] = Po[:, self.OBs*h:self.OBs*(h+1)].reshape(-1)
+            Pr[:, h] = P[:, self.OBs*h:self.OBs*(h+1)].reshape(-1)
+        
+        return y, V, Por, Pr
+
+    def reconstruct(self, V, Por, Pr):
+        nx = int(Por.shape[0] / self.OBs)
+        
+        Porec = np.zeros((nx, self.OBs*24))
+        Prec = np.zeros((nx, self.OBs*24))        
+        for h in range(24):
+            Porec[:, self.OBs*h:self.OBs*(h+1)] = Por[:, h].reshape(nx, self.OBs)
+            Prec[:, self.OBs*h:self.OBs*(h+1)] = Pr[:, h].reshape(nx, self.OBs)
+            
+        y = np.concatenate((V, Porec, Prec), axis=1)
+        return y
+        
     
     ######################## DATA FORMATING
     def prepare_for_train(self, X, y, transformers_are_fit=False):
@@ -218,20 +256,33 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
 
         # Separate prices and order books labels.
         if self.separate_optim:
-            prices, OB = self.split_prices_OB(y)
-            prices_v, OB_v = self.split_prices_OB(yv)
-            
-            # We don't need transformed validation OB!
+            # Handle trainign set
+            prices, V, Po, P = self.split_prices_OB(y)
+
+            print(V.shape, Po.shape, P.shape)            
             if not transformers_are_fit:
-                self.OB_transformer.fit(OB)
-                
-            y = self.OB_transformer.transform(OB)
-            
-            # Train prices are only used for fitting the transformer!!!
-            if not transformers_are_fit:
+                # Fit the price transformer - but we don't need transformed
+                # train prices                
                 self.transformer.fit(prices)
+                self.V_transformer.fit(V)
                 
-            yv = self.transformer.transform(prices_v)        
+            # Transform OB prices
+            Pot = self.transformer.transform(Po)
+            Pt = self.transformer.transform(P)                
+            
+            # Fit the volumes transformer and output training volumes
+            Vt = self.V_transformer.transform(V)            
+
+            # Reconstruct order books
+            print(Vt.shape, Pot.shape, Pt.shape)            
+            y = self.reconstruct(Vt, Pot, Pt)
+            print("Reconstructed Order Book shape", y.shape)
+            
+            # Handle validation set - we don't need order book validation!       
+            prices_v, _, _, _ = self.split_prices_OB(yv)
+            
+            # Transform validation real prices
+            yv = self.transformer.transform(prices_v)
         else:
             if not transformers_are_fit:
                 self.transformer.fit(y)

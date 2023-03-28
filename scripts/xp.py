@@ -10,18 +10,25 @@ Main XP file. For each listed configuration evaluate the base params on all
 datasets.
 """
 
+####### Results container
+results = pandas.DataFrame(
+    columns=["country", "skip_connection", "use_order_book",
+             "order_book_size", "separate_optim",
+             "val_mae", "val_smape", "val_ACC",
+             "test_mae", "test_smape", "test_ACC",
+             "training_time"])
 ####### configurations
 #skip_connections = [True, False]
-skip_connections = [False]
+skip_connections = [True]
 
 #use_order_books = [True, False]
 use_order_books = [False]
 
 #separate_optims = [True, False]
-separate_optims = [False]
+separate_optims = [True]
 
 #order_book_sizes = [20, 50, 100, 250]
-order_book_sizes = [20, 50, 100]
+order_book_sizes = [20, 50]
 
 #countries = ["FR", "DE", "BE", "NL"]
 countries = ["FR", "DE"]
@@ -31,25 +38,24 @@ datasets = ["Lyon", "Munich"]
 
 combinations = list(itertools.product(
     skip_connections, use_order_books, separate_optims, order_book_sizes))
+
+combinations = [(True, False, True, 20),
+                (True, False, True, 50),
+                (False, False, False, 20),
+                (False, False, False, 50)]
 ####### Default params
 params = {}
-params["n_epochs"] = 1
-params["early_stopping"] = None
+params["n_epochs"] = 1000
 ######## For storing results
 spliter = MySpliter(365, shuffle=False)
 n = len(skip_connections) * len(use_order_books) * len(separate_optims) * len(order_book_sizes)
-results = pandas.DataFrame(
-    columns=["country", "skip_connection", "use_order_book",
-             "order_book_size", "separate_optim",
-             "val_mae", "val_smape", "val_ACC",
-             "test_mae", "test_smape", "test_ACC",
-             "training_time"])
 for i, (skip_connection, use_order_book,  separate_optim, order_book_size) in enumerate(combinations):
     for j, (country, dataset) in enumerate(zip(countries, datasets)):
         model_wrapper = OBNWrapper(
             "TEST", dataset, spliter=spliter, country=country,
             skip_connection=skip_connection, use_order_books=use_order_book,
             order_book_size=order_book_size, separate_optim=separate_optim)
+        print(model_wrapper.logs_path)
 
         # Load train dataset
         X, Y = model_wrapper.load_train_dataset()

@@ -16,20 +16,19 @@ import src.models.parallel_scikit as ps
 
 ############## Construct model wrapper and load data
 spliter = MySpliter(365, shuffle=False)
-model_wrapper = OBNWrapper("TEST", "Lyon", country="FR", spliter=spliter,
-                           skip_connection=False,  use_order_books=False,
-                           order_book_size=20, separate_optim=False)
+model_wrapper = OBNWrapper("TEST", "Bruges", country="BE", spliter=spliter,
+                           skip_connection=True,  use_order_books=False,
+                           order_book_size=20, separate_optim=True)
 X, Y = model_wrapper.load_train_dataset()
 ############## Set some params
 ptemp = model_wrapper.params()
-ptemp["transformer"] = "BCM"
 ptemp["early_stopping"] = None
 ptemp["n_epochs"] = 5
+#ptemp["transformer"] = "BCM"
 ptemp["weight_initializers"] = [BiasInitializer("normal", 30, 40, -500, 3000)]
 ptemp["scale"] = "Clip-Sign"
 regr = model_wrapper.make(ptemp)
 (Xtr, Ytr), (Xv, Yv) = model_wrapper.spliter(X, Y)
-
 ############## Fit model and predict validation set
 ps.set_all_seeds(0)
 print(model_wrapper.logs_path)
