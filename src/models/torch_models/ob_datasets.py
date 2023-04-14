@@ -74,8 +74,8 @@ class OrderBookDataset(Dataset):
     def __getitem__(self, idx):
         date_time = self.datetimes[idx]
         order_book = LoadedOrderBook(date_time, self.data_folder)
-
-        if (self.coerce_size_) and (order_book.n > self.OBs):
+        
+        if self.coerce_size_:
             try:
                 order_book = self.shrink(order_book, idx)
             except:
@@ -85,8 +85,9 @@ class OrderBookDataset(Dataset):
             order_book.orders, requires_grad=self.requires_grad)
         data = order_book.data
 
-        if (self.coerce_size_) and (data.shape[1] <= self.OBs):
+        if (self.coerce_size_) and (data.shape[1] < self.OBs):
             data = self.extend(data)
+            raise(Exception("Failed for", date_time, f" : shape of data is {data.shape[1]}"))
         else:
             data = data.reshape(-1, 3)
         
@@ -99,40 +100,85 @@ class OrderBookDataset(Dataset):
         else:
             pstar = self.real_prices.loc[self.datetimes[idx], "price"]
 
+        # Sum limit step orders that have the same price
+        supply_limit_indices = np.where(np.logical_and(
+            OB.p0s == OB.pmin,
+            np.logical_and(OB.prices == 0, OB.signs == 1)))[0]
+        supply_limit_volume = OB.volumes[supply_limit_indices].sum()
+        supply_limit_order = StepOrder("Supply",OB.pmin,supply_limit_volume)
+
+        demand_limit_indices = np.where(np.logical_and(
+            OB.p0s == OB.pmax,
+            np.logical_and(OB.prices == 0, OB.signs == -1)))[0]
+        demand_limit_volume = OB.volumes[demand_limit_indices].sum()
+        demand_limit_order = StepOrder("Demand",OB.pmax,demand_limit_volume)
+
+        indices_to_remove = np.concatenate((
+            supply_limit_indices, demand_limit_indices))
+        mask = np.ones(OB.n, dtype=bool)
+        mask[indices_to_remove] = False
+        OB.orders = OB.orders[mask]
+            
         ####### Supply
-        # Extract the limit order
-        supply_orders = [OB.supply[0]]
-        OBs = SimpleOrderBook(OB.supply[1:])
-        
+        supply_orders = [supply_limit_order]
+        OBs = SimpleOrderBook(OB.supply)
+
+        ### Before
         # Sort orders by closeness to pstar
         supply_before = OBs.orders[((pstar - OBs.p0s) >= 0)]
+        supply_orders_before = list(supply_before[-self.ns_before:])
+        
+        # If there is for supply orders before intersection, summarize them
         if len(supply_before) > self.ns_before:
             remaining_supply_before=SimpleOrderBook(supply_before[:-self.ns_before])
-            supply_orders += [remaining_supply_before.sum("Supply")]            
-        supply_orders += list(supply_before[-self.ns_before:])
-        
+            supply_orders += [remaining_supply_before.sum("Supply")]
+        else:
+            # Otherwise, fill to reach the correct number + 1
+            supply_orders_before += [
+                StepOrder("Supply", pstar, 0)
+                for i in range(self.ns_before - len(supply_orders_before) + 1)]
+        supply_orders += supply_orders_before
+
+        ### After        
         supply_after = OBs.orders[((pstar - OBs.p0s) < 0)]
-        supply_orders += list(supply_after[:self.ns_after])        
+        supply_orders_after = list(supply_after[:self.ns_after])
+
         if len(supply_after) > self.ns_after:
             remaining_supply_after = SimpleOrderBook(supply_after[self.ns_after:])
-            supply_orders += [remaining_supply_after.sum("Supply")]
-            
+            supply_orders_after += [remaining_supply_after.sum("Supply")]
+        else:
+            # Fill at the begining!
+            supply_orders_after = [StepOrder("Supply", pstar, 0) for i in range(self.ns_after - len(supply_orders_after) + 1)] + supply_orders_after
+        supply_orders += supply_orders_after
+        
         ######## Demand
         # Extract the limit order
-        demand_orders = [OB.demand[0]]
-        OBd = SimpleOrderBook(OB.demand[1:])
-        
+        demand_orders = [demand_limit_order]
+        OBd = SimpleOrderBook(OB.demand)
+
+        ### Before
         demand_before = OBd.orders[((pstar - OBd.p0s) < 0)]
+        demand_orders_before = list(demand_before[-self.nd_before:])
+        
         if len(demand_before) > self.nd_before:
             remaining_demand_before=SimpleOrderBook(demand_before[:-self.nd_before])
             demand_orders += [remaining_demand_before.sum("Demand")]
-        demand_orders += list(demand_before[-self.nd_before:])            
-            
+        else:
+            demand_orders_before += [
+                StepOrder("Demand", pstar, 0)
+                for i in range(self.nd_before - len(demand_orders_before) + 1)]
+        demand_orders += demand_orders_before
+
+        ### After
         demand_after = OBd.orders[((pstar - OBd.p0s) >= 0)]
-        demand_orders += list(demand_after[:self.nd_after])        
+        demand_orders_after = list(demand_after[:self.nd_after])
+        
         if len(demand_after) > self.nd_after:
             remaining_demand_after = SimpleOrderBook(demand_after[self.nd_after:])
-            demand_orders += [remaining_demand_after.sum("Demand")]            
+            demand_orders_after += [remaining_demand_after.sum("Demand")]
+        else:
+            demand_orders_after = [StepOrder("Demand", pstar, 0) for i in range(self.nd_after - len(demand_orders_after) + 1)] + demand_orders_after
+        demand_orders += demand_orders_after            
             
         OB_shrinked = SimpleOrderBook(np.array(supply_orders + demand_orders))
         return OB_shrinked

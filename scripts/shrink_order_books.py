@@ -4,8 +4,11 @@ import os, datetime, numpy as np, pandas, matplotlib, matplotlib.pyplot as plt
 import itertools, time
 from torch.utils.data import DataLoader
 from src.analysis.utils import load_real_prices
+from src.analysis.shrink_order_books_utils import OB_to_csv
 
-from src.models.torch_models.ob_datasets import OrderBookDataset, DirectOrderBookDataset
+from src.models.torch_models.ob_datasets import OrderBookDataset
+from src.models.spliter import MySpliter
+from src.models.torch_wrapper import OBNWrapper
 from src.models.torch_models.torch_solver import BatchPFASolver
 from src.euphemia.order_books import *
 from src.euphemia.solvers import *
@@ -13,7 +16,7 @@ from src.euphemia.ploters import get_ploter
 
 base_folder = os.environ["MOB"]
 
-country = "FR"
+country = "BE"
 data_folder = os.path.join(base_folder, "curves")
 df = load_real_prices(country)
 datetimes = df.index
@@ -27,22 +30,23 @@ loader = DataLoader(obd, batch_size=10, num_workers=os.cpu_count())
 # Get a batch
 batch, batch_idx = next(iter(loader))
 
-######## Compare
-############ Small XP
-idt = 15
+########## Comparison plot
+idt = 0
+country = "DE"
+df = load_real_prices(country)
 fig, ax = plt.subplots(1, figsize=(19.2, 10.8))
 
-OBref = LoadedOrderBook(df.index[idt], data_folder)
+OBref = LoadedOrderBook(df.index[idt], os.path.join(data_folder, country))
 solverref = MinDual(OBref)
 solverref.solve("dual_derivative_heaviside")
 ploterref = get_ploter(OBref)
 ploterref.display(ax_=ax, colors="k", labels="original order book")
 
-OBtries = [20, 30, 50, 100, 500]
+OBtries = [20, 50, 100, 250]
 colors = ["r", "m", "b", "c", "g"]
 N = 1000
 for j, OBs in enumerate(OBtries):
-    obd = OrderBookDataset(data_folder, df.index, OBs, requires_grad=False,
+    obd = OrderBookDataset(country, data_folder, df.index, OBs, requires_grad=False,
                            real_prices=df)
     OBshrink = SimpleOrderBook(TorchOrderBook(obd[idt][0]).orders)
     solver = MinDual(OBshrink)
@@ -134,57 +138,6 @@ germany.groupby(["OBs", "niter", "k"]).error.mean()
 belgium.loc[:, "error"] = np.abs(df.loc[belgium.period_start_time.values, "price"].values - belgium.price.values)
 belgium.groupby(["OBs", "niter", "k"]).error.mean()
 
-            
-def OB_to_csv(OB, datetimes):
-    """
-    Converts a numpy OB to a dataframe and save it
-    """
-    OBs = OB.shape[1]
-    variables = ["V", "Po", "P"]
-    cols = [f"OB_{h}_{v}_{ob}" for h in range(24)
-          for v in variables for ob in range(OBs)]
-    past_cols = [f"OB_{h}_{v}_{ob}_past_1" for h in range(24)
-                 for v in variables for ob in range(OBs)]
-    
-    # daylight saving time
-    days_to_add = [datetime.date(2016, 3, 27),
-                   datetime.date(2017, 3, 26),
-                   datetime.date(2018, 3, 25),
-                   datetime.date(2019, 3, 31),
-                   datetime.date(2020, 3, 29),
-                   datetime.date(2021, 3, 28)]
-    dates = [datetime.date(d.year, d.month, d.day) for d in datetimes]
-    
-    u_dates = list(np.unique(dates))
-
-    res = pandas.DataFrame(index = u_dates, columns=past_cols + cols)
-    for i, (dt, d) in enumerate(zip(datetimes, dates)):
-        h = dt.hour
-        d_past = d + datetime.timedelta(hours=24)
-        
-        for j, v in enumerate(variables):
-            data = OB[i, :, j].reshape(-1)
-            
-            cs = [f"OB_{h}_{v}_{ob}" for ob in range(OBs)]
-            res.loc[d, cs] = data.copy()
-            
-            # Fill past
-            cs_past = [f"OB_{h}_{v}_{ob}_past_1" for ob in range(OBs)]  
-            if d_past <= dates[-1]:                        
-                res.loc[d_past, cs_past] = data.copy()
-
-            # Also fill daylight saving times
-            if (d in days_to_add) and (h == 1):
-                csnext = [f"OB_2_{v}_{ob}" for ob in range(OBs)]                
-                res.loc[d, csnext] = data.copy()
-
-                cs_past = [f"OB_2_{v}_{ob}_past_1" for ob in range(OBs)]  
-                if d_past <= dates[-1]:                        
-                    res.loc[d_past, cs_past] = data.copy()
-                            
-    res.sort_index(inplace=True)
-    return res
-
 country = "DE"  
 df = load_real_prices(country)
 datetimes = df.index
@@ -198,11 +151,13 @@ res = pandas.read_csv(os.path.join(base_folder, "curves", f"{country}_{OBs}.csv"
                       index_col="period_start_date")
 
 ###### SAVE DATASETS
+data_folder = os.path.join(base_folder, "curves")
+
 countries = ["FR", "DE", "BE", "NL"]
 #OBsizes = [20, 50, 100, 250]
-OBsizes = [50, 100, 250]
+OBsizes = [100, 250]
 batch_size = 30
-country = "NL"
+country = "BE"
 print(f"Country {country}")
 df = load_real_prices(country)
 datetimes = df.index
@@ -218,3 +173,53 @@ for OBs in OBsizes:
     res = OB_to_csv(OB, datetimes)
     res.to_csv(os.path.join(base_folder, "curves", f"{country}_{OBs}.csv"),
                index_label="period_start_date")
+
+###### Correct summer to winter
+summer_to_winter = [datetime.date(2016, 10, 30),
+                    datetime.date(2017, 10, 29),
+                    datetime.date(2018, 10, 28),
+                    datetime.date(2019, 10, 27),
+                    datetime.date(2020, 10, 25),
+                    datetime.date(2021, 10, 31)]
+# Load dataset
+spliter = MySpliter(365, shuffle=False)
+country = "BE"
+dataset = "Bruges"
+for OBs in [20, 50, 100, 250]:
+    model_wrapper = OBNWrapper("TEST", dataset, country=country, spliter=spliter,
+                               use_order_books=True, order_book_size=OBs,
+                               separate_optim=True)
+
+    # Load OB dataframe
+    order_book_path = os.path.join(
+        os.environ["MOB"],"curves",
+        f"{model_wrapper.country}_{model_wrapper.order_book_size}.csv")
+    OB = pandas.read_csv(order_book_path)            
+    OB.index = [datetime.datetime.strptime(
+        d, "%Y-%m-%d") for d in OB.period_start_date]
+    OB.drop(columns="period_start_date", inplace=True)
+
+    # Load prices
+    df = load_real_prices(country)
+    
+    # Create OB loader
+    obd = OrderBookDataset(country, data_folder, df.index, OBs, real_prices=df)
+    for day in summer_to_winter[-2:]:
+        # Compute the index and columns of hour 2
+        date_time = datetime.datetime(day.year, day.month, day.day, 2)
+        columns = [f"OB_2_{V}_{i}" for V in ["V", "Po", "P"] for i in range(OBs)]
+        past_columns = [f"OB_2_{V}_{i}_past_1" for V in ["V", "Po", "P"]
+                        for i in range(OBs)]    
+        idx = np.where(df.index == date_time)[0][0]
+        past_day = day + datetime.timedelta(hours=24)
+        
+        # Load Data for hour 2
+        data = obd[idx][0].detach().numpy().reshape(-1, order='F')
+        
+        # Replace data of hour 2 in the dataset
+        OB.loc[pandas.to_datetime(day), columns] = data.copy()
+        
+        # Replace past data of hour 2
+        OB.loc[pandas.to_datetime(past_day), past_columns] = data.copy()
+    
+    OB.to_csv(order_book_path)

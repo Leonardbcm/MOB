@@ -31,3 +31,77 @@ def get_model_wrappers(combinations, countries, datasets, spliter):
                 order_book_size=order_book_size, separate_optim=separate_optim)
             model_wrappers += [model_wrapper]
     return model_wrappers
+
+def df_to_latex(df, index=True, index_col="", hlines=True, roundings=[],
+                highlight=[]):    
+    headers = [index_col] + list(df.columns)
+    nc = len(headers)
+    col_params = "|"
+    tab_cols = ""
+    for header in headers:
+        tab_cols += "\\textbf{" + header + "} & "
+        col_params += "c|"
+    tab_cols = tab_cols[:-2]
+
+    if highlight == []:
+        highlight = ["" for header in headers]
+
+    if roundings == []:
+        roundings = [2 for header in headers]
+    try:
+        roundings[0]
+    except:
+        roundings = [roundings for header in headers]
+
+    s = ""
+    # DEFINE TABULAR 
+    s += """
+    \\begin{table}[htb]
+    \\begin{center}
+          \scalebox{1}{
+            \\begin{tabular}{"""
+    s += col_params
+    s += """}
+              \hline
+    """
+    s += tab_cols + "\\\\"
+    s += """
+              \hline
+    """
+    if hlines:
+        s += """
+                  \hline
+        """
+
+    rows = list(df.index)
+    nr = len(rows)
+    for row in rows:
+        # Add the index in first column
+        i_row = str(row)        
+        if index:
+            i_row = "\\textbf{" + i_row + "}"
+        s += i_row
+        values = df.loc[row].values
+        for v, highlight_, col, rounding in zip(
+                values, highlight, df.columns, roundings):
+            str_v = str(round(v, ndigits=rounding))
+            if str_v == "nan": str_v = " - "
+            str_v_highlighted = "{\\bf "+ str_v + "}"
+            if ((highlight_ == "high") and (v == max(df.loc[:, col]))) or ((highlight_ == "low") and (v == min(df.loc[:, col]))):
+                str_v = str_v_highlighted
+            s += " & " + str_v
+        s += """\\\\
+        """
+        if hlines:
+            s += """\hline
+            """
+
+    if not hlines: s+= """\hline
+    """
+    s +=  """ \end{tabular}  
+    }
+    \end{center}
+    \caption{}
+    \label{}
+    \end{table}"""
+    return s

@@ -1,5 +1,6 @@
 import matplotlib.pyplot as plt, numpy as np
 
+
 class InvalidInputError(Exception):
     def __init__(self, s):
         Exception.__init__(self, s)

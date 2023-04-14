@@ -400,20 +400,8 @@ class OBNWrapper(TorchWrapper):
         # load OB if needed
         if (self.skip_connection or self.use_order_books
             or self.separate_optim) and OB:
-            order_book_path = os.path.join(
-                os.environ["MOB"],"curves",
-                f"{self.country}_{self.order_book_size}.csv")
-            OB = pandas.read_csv(order_book_path)            
-            OB.index = [datetime.datetime.strptime(
-                d, "%Y-%m-%d") for d in OB.period_start_date]
-            OB.drop(columns="period_start_date", inplace=True)
-                        
-            variables = ["V", "Po", "P"]
-            OBs = int(self.order_book_size)
-            OB_columns = [f"OB_{h}_{v}_{ob}_past_1" for h in range(24)
-                          for v in variables for ob in range(OBs)]
-            OB_features = OB.loc[:, OB_columns]
             
+            OB_features, OB_columns, OB_lab, OB_labels= self.load_order_books()
             df = df.join(OB_features)
             self.columns += OB_columns
             
@@ -424,23 +412,52 @@ class OBNWrapper(TorchWrapper):
             Y = df.loc[:, self.label].values
             X = df.drop(columns=self.label).values    
             if self.separate_optim:
-                OB_labels = [f"OB_{h}_{v}_{ob}" for h in range(24)
-                             for v in variables for ob in range(OBs)]
-                OB_lab = OB.loc[:, OB_labels]
                 df = df.join(OB_lab)
                 
                 Y = df.loc[:, OB_labels + self.label].values
                 X = df.drop(columns=OB_labels + self.label).values
         else:
             Y = df.loc[:, self.label].values
-            X = df.drop(columns=self.label).values
+            X = df.drop(columns=self.label).values            
         return X, Y
 
+    def load_order_books(self):
+        order_book_path = os.path.join(
+            os.environ["MOB"],"curves",
+            f"{self.country}_{self.order_book_size}.csv")
+        OB = pandas.read_csv(order_book_path)
+
+        date_col = "period_start_date" 
+        OB.index = [datetime.datetime.strptime(
+            d, "%Y-%m-%d") for d in OB.loc[:, date_col]]
+        OB.drop(columns=date_col, inplace=True)
+        
+        variables = ["V", "Po", "P"]
+        OBs = int(self.order_book_size)
+        OB_columns = [f"OB_{h}_{v}_{ob}_past_1" for h in range(24)
+                      for v in variables for ob in range(OBs)]
+        OB_features = OB.loc[:, OB_columns]
+        
+        OB_labels = [f"OB_{h}_{v}_{ob}" for h in range(24)
+                     for v in variables for ob in range(OBs)]
+        OB_lab = OB.loc[:, OB_labels]
+
+        return OB_features, OB_columns, OB_lab, OB_labels
+    
     def load_train_dataset(self, OB=True):
         return self._load_dataset(self.train_dataset_path(), "train", OB=OB)
     
     def load_test_dataset(self, OB=True):
         return self._load_dataset(self.test_dataset_path(), "test", OB=OB)
+
+    def init_indices(self):
+        if self.skip_connection or self.separate_optim:
+            start = 0
+            
+            self.v_indices = [start + 3*self.order_book_size*h+i for h in range(24)
+                              for i in range(self.order_book_size)]
+            self.po_indices = [v + self.order_book_size for v in self.v_indices]
+            self.p_indices = [po + self.order_book_size for po in self.po_indices]
 
     def predict_order_books(self, regr, X):
         model = regr.steps[1][1]

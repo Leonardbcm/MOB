@@ -117,7 +117,7 @@ class DNNWrapper(NeuralNetWrapper):
 
     def make(self, ptemp):
         K.clear_session()        
-        scaler, transformer, ptemp_ = self.prepare_for_make(ptemp)
+        scaler, transformer, _, ptemp_ = self.prepare_for_make(ptemp)
             
         model = DNN("test", ptemp_)
         pipe = make_pipeline(scaler, model)

@@ -48,7 +48,32 @@ for i, model_wrapper in enumerate(model_wrappers):
         results.use_order_book = results.use_order_book.astype("boolean")        
 
 # Filter models that have not run
-df = results[results.stopped_epoch > 0]
+df = results[results.stopped_epoch < 999]
+df = results
+# Format the results
+errors = ["val_mae", "val_dae", "val_smape","val_ACC"]
+errors = ["test_mae", "test_dae", "test_smape","test_ACC"]
+indices = [c + "_" + e.split("_")[1] for c in countries for e in errors]
+columns = [str(so) + str(sc) + str(obs) for (so, _, sc, obs) in combinations]
+res = pandas.DataFrame(index=indices, columns=columns)
+for country in countries:
+    for index in errors:
+        for (so, _, sc, obs) in combinations:
+            col = str(so) + str(sc) + str(obs)
+            res.loc[country + "_" + index.split("_")[1], col] = df.loc[
+                np.logical_and(
+                    np.logical_and(
+                        np.logical_and(
+                            (df.country == country),
+                            (df.skip_connection == sc)),
+                        (df.separate_optim == so)),
+                    (df.order_book_size == obs)), index].values[0]
+            
+res.index = [country + "_" + r.split("_")[1] for r in res.index]
+res.columns = [c.split("SO=")[1].split("_")[0] + c.split("SC=")[1].split("_")[0] + c.split("_")[-1] for c in res.columns]
+    
+print(df_to_latex(res))
+
         
 # Get log path
 model_wrapper = model_wrappers[df.index[0]]
