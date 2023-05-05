@@ -10,10 +10,10 @@ Main XP file. For each listed configuration evaluate the base params on all
 datasets.
 """
 ####### MAIN PARAMS
-N_EPOCHS = 1
-N_SAMPLES = 40
-N_VAL = 10
-BATCH = 2
+N_EPOCHS = 1000
+N_SAMPLES = 1444
+N_VAL = 365
+BATCH = 80
 
 ####### Results container
 results = pandas.DataFrame(
@@ -33,7 +33,7 @@ for i, ID in enumerate(IDs):
         spliter = MySpliter(N_VAL, shuffle=False)        
         model_wrapper = OBNWrapper(
             "XP", dataset, spliter=spliter, country=country, skip_connection=True,
-            use_order_books=False, order_book_size=20, IDn=ID, tboard="XP")
+            use_order_books=False, order_book_size=20, IDn=ID, tboard="")
         
         print(model_wrapper.logs_path)
 
@@ -48,7 +48,8 @@ for i, ID in enumerate(IDs):
         default_params["early_stopping"] = None
         default_params["n_epochs"] = N_EPOCHS
         default_params["batch_size"] = BATCH        
-        default_params["OB_plot"] = os.path.join(model_wrapper.logs_path)
+        default_params["OB_plot"] = False
+        default_params["profile"] = False
         regr = model_wrapper.make(default_params)
 
         # Fit the model

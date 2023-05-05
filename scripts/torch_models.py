@@ -20,14 +20,16 @@ spliter = MySpliter(365, shuffle=False)
 model_wrapper = OBNWrapper("TEST", "Bruges", country="BE", tboard="CHECK",
                            spliter=spliter, skip_connection=True,
                            use_order_books=False,
-                           order_book_size=20, alpha=1/3, beta=1/3, gamma=1/3)
+                           order_book_size=20,
+                           IDn = 1)
+                           #alpha=0, beta=0, gamma=1)
 X, Y = model_wrapper.load_train_dataset()
 print(X.shape)
 print(Y.shape)
 ############## Set some params
 ptemp = model_wrapper.params()
 ptemp["early_stopping"] = None
-ptemp["n_epochs"] = 10
+ptemp["n_epochs"] = 2
 ptemp["OB_plot"] = os.path.join(model_wrapper.logs_path)
 ptemp["profile"] = True
 
@@ -41,14 +43,11 @@ yhat = model_wrapper.predict_val(regr, Xv)
 print(model_wrapper.logs_path)
 
 model_wrapper.price_mae(Yv, yhat)
-model_wrapper.smape(Yv, yhat)
-model_wrapper.ACC(Yv, yhat)
+model_wrapper.price_smape(Yv, yhat)
+model_wrapper.price_ACC(Yv, yhat)
 
-yhat_tr = model_wrapper.predict_val(regr, Xtr)
-model_wrapper.smape(Ytr, yhat_tr)
-
-SymmetricMeanAbsolutePercentageError()(torch.tensor(Yv), torch.tensor(yhat))
-SymmetricMeanAbsolutePercentageError()(torch.tensor(Ytr), torch.tensor(yhat_tr))
+model_wrapper.OB_ACC(Yv, yhat)
+model_wrapper.OB_smape(Yv, yhat)
 
 # Test set
 Xt, Yt = model_wrapper.load_test_dataset()
