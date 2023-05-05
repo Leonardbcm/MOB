@@ -9,6 +9,12 @@ from matplotlib import cm
 
 from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error, mean_squared_error
 
+def absolute_error(ytrue, ypred):
+    return np.abs(ytrue - ypred)
+
+def relative_error(ytrue, ypred):
+    return 200 * absolute_error(ytrue, ypred)/(0.001+np.abs(ytrue) + np.abs(ypred))
+
 def mae(ytrue, ypred, mean=True):
     maes = np.abs(ytrue - ypred).mean(axis=0)
     if mean: return maes.mean()

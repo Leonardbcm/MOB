@@ -18,19 +18,22 @@ class ModelWrapper(object):
     Order Books models parameters:
     use_order_books : indicates if the order books should be present in the 
                       input data X.
-    separate_optim : indicates if the solver part of the neural network shall be
-                        integrated in the gradient computation
     skip_connection : indicates if we add a skip connection of the original order
                       books before the solver layer (predict an OB differential)
                       if use_order_books is false, this will still work.
     order_book_size : The size of shrinked order books to load.    
+    alpha : weight of the direct predictions in the loss
+    beta : weight of the optimized prices in the loss
+    gamma : weight of the order book predition in the loss
+
+    If gamma > 0 and alpha = 0 and beta = 0, then the model forecasts Order Books!
+    Otherwise, it forecasts ((alpha * Yalpha) + (beta * Ybeta)) / (alpha + beta) 
+    even if gamma > 0 (the order book loss is still counted to train the model).
     """
     def __init__(self, prefix, dataset_name, country="", spliter=None,
                  predict_two_days=False, known_countries=["CH", "GB"],
-                 skip_connection=False,                 
-                 use_order_books=False,
-                 order_book_size=20,
-                 separate_optim=False,                 
+                 skip_connection=False, use_order_books=False,
+                 order_book_size=20, alpha=1, beta=0, gamma=0, IDn=0,
                  flow_estimation="", countries_to_predict="not_graph"):
         self.prefix = prefix
         self.dataset_name = dataset_name
@@ -55,31 +58,73 @@ class ModelWrapper(object):
         self.flow_estimation = flow_estimation
         
         self.use_order_books = use_order_books
-        self.separate_optim = separate_optim
         self.order_book_size = order_book_size
         self.skip_connection = skip_connection
+        self.OBs = self.order_book_size
 
-        if self.separate_optim and (self.order_book_size < 1):
-            raise Exception("Must provide a valid order book size to load if prediction and optimizaiton are separated!")
+        # Coefficients
+        self.IDn = IDn
+        if self.IDn > 0 :
+            alpha, beta, gamma = self.get_coefficients(self.IDn)
+            self.alpha = alpha
+            self.beta = beta
+            self.gamma = gamma
+        else:            
+            self.alpha = alpha
+            self.beta = beta
+            self.gamma = gamma
+
+        #### Some computed shortcuts        
+        # If we predict only order books
+        self.predict_order_books = ((self.alpha == 0) and (self.beta == 0) and (self.gamma > 0))
+
+        # If OB are in X = the loaded data
+        self.OB_in_X = ((self.gamma > 0) or (self.beta > 0)) and (self.skip_connection or self.use_order_books)
+
+        # If OB are in input =  the input of the first NN layer
+        self.OB_in_input = self.use_order_books
+
+        # If OB are in the output
+        self.OB_in_output = self.gamma > 0
+
+        # If OB are in Y = the loaded labels
+        self.OB_in_Y = self.gamma > 0
+
+        # If prices are in the output = the output of the NN
+        self.p_in_output = (self.beta > 0) or (self.alpha > 0)
+
+        # If prices are in Y = the loaded labels
+        self.p_in_Y = True
+
+        if (self.gamma > 0) and (self.order_book_size < 1):
+            raise Exception("Must provide a valid order book size to load you want to compute the order book loss!")
         
         if self.skip_connection and (self.order_book_size < 1):
             raise Exception("Must provide a valid order book size to load if you want to add a skip connection")
 
         if self.use_order_books and (self.order_book_size < 1):
-            raise Exception("Must provide a valid order book size to load if you want to add them to the input data")        
+            raise Exception("Must provide a valid order book size to load if you want to add them to the input data")
 
         # For differentiating price and edge labels,
         # will be overwritten for graphs
         self.nodes_per_country = 1
         self.n_out_per_nodes = 24
         
-
     def string(self):
         return "ModelWrapper"
 
     def shuffle_train(self):
         return True
-        
+
+    def get_coefficients(self, IDn):
+        """
+        Return alpha, beta, gamma according to the given ID number
+        """
+        coefficients = np.array([[1, 0, 0], [0, 0, 1], [0, 1, 0],
+                                 [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5],
+                                 [1/3, 1/3, 1/3]])
+        return coefficients[IDn - 1]
+    
     def save_name(self):
         return mu.save_name(self.prefix, self.dataset_name)
 
@@ -225,25 +270,26 @@ class ModelWrapper(object):
     def predict(self, regr, X):
         return regr.predict(X)
 
-    def smape(self, y, yhat):
-        if self.separate_optim:
-            y = y[:, -len(self.label):]
-        return smape(y, yhat)
+    def OB_smape(self, y, yhat):
+        return smape(y[:, self.yOB_indices], yhat[:, self.yOB_indices])
+    
+    def OB_mae(self, y, yhat):
+        return mae(y[:, self.yOB_indices], yhat[:, self.yOB_indices])
 
-    def dae(self, y, yhat):
-        if self.separate_optim:
-            y = y[:, -len(self.label):]
-        return dae(y, yhat)    
+    def OB_ACC(self, y, yhat):
+        return ACC(y[:, self.yOB_indices], yhat[:, self.yOB_indices])    
 
-    def mae(self, y, yhat):
-        if self.separate_optim:
-            y = y[:, -len(self.label):]
-        return mean_absolute_error(y, yhat)
+    def price_smape(self, y, yhat):
+        return smape(y[:, self.y_indices], yhat[:, self.y_indices])
 
-    def ACC(self, y, yhat):
-        if self.separate_optim:
-            y = y[:, -len(self.label):]
-        return ACC(y, yhat)    
+    def price_dae(self, y, yhat):
+        return dae(y[:, self.y_indices], yhat[:, self.y_indices])
+    
+    def price_mae(self, y, yhat):
+        return mae(y[:, self.y_indices], yhat[:, self.y_indices])
+
+    def price_ACC(self, y, yhat):
+        return ACC(y[:, self.y_indices], yhat[:, self.y_indices])
     
     def eval(self, regr, X, y): 
         yhat = self.predict(regr, X)

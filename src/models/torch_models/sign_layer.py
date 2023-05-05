@@ -1,6 +1,34 @@
 import numpy as np, torch
 from torch import nn
 
+class FixedSignLayer(nn.Module):
+    """
+    A layer that coerce the signs of the input.
+    Rules for the signs are :
+    
+    The first OBs/2 orders are supply orders, the last
+    OBs/2 orders are demand orders
+    """
+    def __init__(self, OBs, dtype=torch.float32):
+        nn.Module.__init__(self)
+        self.dtype = dtype
+        self.OBs = OBs
+        self.middle = int(self.OBs / 2)
+
+        self.mask = torch.ones(self.OBs)
+        self.mask[self.middle:] = -1
+
+    def forward(self, P, V):        
+        # Apply signs
+        V = torch.abs(V) * self.mask
+        P = torch.abs(P) * self.mask
+        return P, V
+
+    def __str__(self):
+        return f"FixedSignLayer({self.mask})"
+
+    def __repr__(self):
+        return self.__str__()    
 
 class SignLayer(nn.Module):
     """

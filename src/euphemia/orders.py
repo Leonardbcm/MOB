@@ -51,6 +51,22 @@ class Order(object):
     def __eq__(self, other):
         return other.direction == self.direction
     
+
+def simple_order(V, Po, P=0.0):
+    if V < 0:
+        direction = "Demand"
+    if V > 0:
+        direction = "Supply"
+    if V == 0:
+        raise ValueError("V is null!")
+    
+    # Create a step order
+    if P == 0.0:
+        return StepOrder(direction, Po, V)
+
+    # Create a Linear order
+    return LinearOrder(direction, Po, P, V)
+
     
 class SimpleOrder(Order):
     """

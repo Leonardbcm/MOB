@@ -15,14 +15,21 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
     """
     def __init__(self, name, model_):
         self.name = name
-        self.model_ = model_
-        
+        self.model_ = model_        
         self.dtype = torch.float32        
 
         # Architecture parameters
         self.skip_connection = model_["skip_connection"]
         self.use_order_books = model_["use_order_books"]
-        self.separate_optim = model_["separate_optim"]
+        self.predict_order_books = model_["predict_order_books"]        
+
+        self.alpha = model_["alpha"]
+        self.beta = model_["beta"]
+        self.gamma = model_["gamma"]
+
+        # Corr coefs for the gamma loss
+        self.coefs = model_["coefs"]
+        
         # Should be equal to OBs or 0
         self.order_book_size = model_["order_book_size"]
         
@@ -31,15 +38,18 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         self.OBN = model_["OBN"]        
         self.OBs = model_["OBs"]
         self.N_OUTPUT = model_["N_OUTPUT"]
-        self.N_PRICES = model_["N_PRICES"]        
+        self.N_Y = model_["N_Y"]
+        self.N_X = model_["N_X"]        
+        self.N_PRICES = model_["N_PRICES"]
+        self.N_INPUT = model_["N_INPUT"]
+        self.N_DATA = model_["N_DATA"]        
         self.dropout = model_["dropout"]
         
         # Other network parameters
-        self.transformer = model_["transformer"]
-        self.V_transformer = model_["V_transformer"]        
         self.weight_initializers = model_["weight_initializers"]    
         self.scale = model_["scale"]        
-        self.batch_norm = model_["batch_norm"]        
+        self.batch_norm = model_["batch_norm"]
+        self.transformer = model_["transformer_"]
 
         # Solver parameters
         self.k = model_["k"]
@@ -55,7 +65,6 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         self.n_epochs = model_["n_epochs"]
         self.batch_size = model_["batch_size"]
         self.shuffle_train = model_["shuffle_train"]
-        self.criterion = model_["criterion"]
         self.spliter = model_["spliter"]        
 
         # Callbacks parameters
@@ -71,10 +80,13 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         # For saving tboard logs and checkpoints
         self.logdir = os.path.join(
             os.environ["MOB"], "logs", self.tensorboard)    
-        self.profile = model_["profile"]
+        self.log_every_n_steps = model_["log_every_n_steps"]
         self.store_OBhat = model_["store_OBhat"]
         self.store_val_OBhat = model_["store_val_OBhat"]
-        self.log_every_n_steps = model_["log_every_n_steps"]        
+        self.OB_plot = model_["OB_plot"]
+
+        # The profiler
+        self.profiler = model_["profiler"]        
 
         # Parallelization params
         self.n_cpus = model_["n_cpus"]
@@ -82,6 +94,17 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
             self.n_cpus_ = os.cpu_count()
         else:
             self.n_cpus_ = self.n_cpus
+
+        # Copy Indices
+        self.y_indices = model_["y_indices"]
+        self.yv_indices = model_["yv_indices"]
+        self.ypo_indices = model_["ypo_indices"]
+        self.yp_indices = model_["yp_indices"]
+        
+        self.x_indices = model_["x_indices"]
+        self.v_indices = model_["v_indices"]
+        self.po_indices = model_["po_indices"]
+        self.p_indices = model_["p_indices"]
             
         torch.set_num_threads(self.n_cpus_)
 
@@ -95,12 +118,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         Reset the network networks:
          (otpimizer, training state, callbacks, etc)
         To call everytime an hyperparameter changes!
-        """
-        
-        # Correct the input shape if order books where loaded but unused
-        if not self.use_order_books and (self.skip_connection or self.separate_optim):
-            input_shape = input_shape - self.OBs * 24 * 3
-            
+        """            
         self.model = self.create_network(input_shape=input_shape)
 
         # Set callbacks        
@@ -111,6 +129,8 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
             self.callbacks += [ValOBhat(self.store_val_OBhat)]
         if self.store_OBhat:
             self.callbacks += [StoreOBhat(self.store_OBhat)]
+        if self.OB_plot:
+            self.callbacks += [PlotOBCallback(self.OB_plot)]
         self.early_stopping_callbacks()
 
     def create_trainer(self, X, Y=None, verbose=0):
@@ -124,7 +144,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
             res = test_loader
 
         # Instanciate the model
-        self.update_params(input_shape=X.shape[1])
+        self.update_params(input_shape=self.N_INPUT)
         print(self.model)
         
         # Create the trainer
@@ -139,40 +159,44 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
                 
     ###### METHODS FOR SKLEARN
     def fit(self, X, Y, verbose=0):
+        self.xshape = X.shape
         train_loader, val_loader = self.create_trainer(X, Y, verbose=0)
-
+        self.tlshape = next(iter(train_loader))[0].shape
+        
         # Train   
         self.trainer.fit(self.model, train_dataloaders=train_loader,
                          val_dataloaders=val_loader)
         
     def predict(self, X):
+        """
+        Forward pass in the model. If only gamma > 0, then this is an OB prediction.
+        If only alpha > 0, then this is just a price prediction.        
+        """
         test_loader = self.prepare_for_test(X)
         predictions = self.trainer.predict(self.model, test_loader)
-        ypred = torch.zeros(X.shape[0], self.N_PRICES)
+        ypred = np.zeros((X.shape[0], self.N_OUTPUT))
             
         idx = 0
         for i, data in enumerate(predictions):
             bs = data.shape[0]                
             ypred[idx:idx+bs] = data
             idx += bs
-
-        ypred = ypred.detach().numpy()
+            
         ypred = self.transformer.inverse_transform(ypred)
         return ypred
-
-    def predict_order_books(self, X):
+    
+    def predict_ob(self, X):
         test_loader = self.prepare_for_test(X)
-        predictions = [self.trainer.model.forward(batch, predict_order_books=True)
-                       for batch in iter(test_loader)]
+        predictions = [self.trainer.model.predict_step_OB(batch, batch_idx)
+                       for (batch, batch_idx) in enumerate(iter(test_loader))]
 
-        ypred = torch.zeros(X.shape[0], 24, self.OBs, 3)
+        ypred = np.zeros((X.shape[0], 24, self.OBs, 3))
         idx = 0
         for i, data in enumerate(predictions):
             bs = int(data.shape[0]/24)
             ypred[idx:idx+bs] = data.reshape(bs, 24, self.OBs, 3)
             idx += bs
-
-        ypred = ypred.detach().numpy()
+            
         return ypred
 
     def score(self, X, y):
@@ -193,107 +217,27 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
                     monitor="val_loss", patience=self.early_stopping_patience))
             
     def create_network(self, input_shape):
-        return SolvingNetwork(input_shape, self.NN1, self.OBs, self.OBN,
-                              self.batch_norm, self.criterion,
-                              self.N_OUTPUT, self.k, self.batch_solve, self.niter,
-                              self.pmin, self.pmax, self.step, self.mV,
-                              self.check_data, self.transformer,self.V_transformer,
-                              self.scale, self.weight_initializers, self.profile,
-                              self.skip_connection, self.use_order_books,
-                              self.separate_optim, self.N_PRICES, self.dropout)
-
-    def init_indices(self):
-        if self.skip_connection or self.separate_optim:
-            start = 0
-            
-            self.v_indices = [start + 3*self.OBs*h+i for h in range(24)
-                              for i in range(self.OBs)]
-            self.po_indices = [v + self.OBs for v in self.v_indices]
-            self.p_indices = [po + self.OBs for po in self.po_indices]
-    
-    def split_prices_OB(self, y):
-        """
-        Compute the OB indices based on the specified orderbooksize
-        Separate prices and order books from the labels.
-        Also splits the OB into its components : V, Po, P.
-        """
-        
-        stop = self.N_PRICES
-        OB = y[:, :-stop].copy()
-        y = y[:, -stop:].copy()
-
-        self.init_indices()
-        V = OB[:, self.v_indices]
-        Po = OB[:, self.po_indices]
-        P = OB[:, self.p_indices]
-
-        # Reshape Po and Pr so they fit in the scalers!
-        nx = OB.shape[0]
-        Por = np.zeros((nx * self.OBs, 24))
-        Pr = np.zeros((nx * self.OBs, 24))
-        for h in range(24):
-            Por[:, h] = Po[:, self.OBs*h:self.OBs*(h+1)].reshape(-1)
-            Pr[:, h] = P[:, self.OBs*h:self.OBs*(h+1)].reshape(-1)
-        
-        return y, V, Por, Pr
-
-    def reconstruct(self, V, Por, Pr):
-        nx = int(Por.shape[0] / self.OBs)
-        
-        Porec = np.zeros((nx, self.OBs*24))
-        Prec = np.zeros((nx, self.OBs*24))        
-        for h in range(24):
-            Porec[:, self.OBs*h:self.OBs*(h+1)] = Por[:, h].reshape(nx, self.OBs)
-            Prec[:, self.OBs*h:self.OBs*(h+1)] = Pr[:, h].reshape(nx, self.OBs)
-            
-        y = np.concatenate((V, Porec, Prec), axis=1)
-        return y
-        
+        return SolvingNetwork(
+            input_shape, self.NN1, self.OBs, self.OBN,
+            self.batch_norm, self.k, self.batch_solve, self.niter,
+            self.pmin, self.pmax, self.step, self.mV, self.check_data,
+            self.transformer, self.scale, self.weight_initializers, self.profiler,
+            self.skip_connection, self.use_order_books, self.predict_order_books,
+            self.alpha, self.beta, self.gamma, self.coefs,
+            self.N_PRICES, self.N_OUTPUT, self.dropout,
+            self.y_indices, self.yv_indices, self.ypo_indices, self.yp_indices,
+            self.x_indices, self.v_indices, self.po_indices, self.p_indices)
     
     ######################## DATA FORMATING
-    def prepare_for_train(self, X, y, transformers_are_fit=False):
-        ((X, y), (Xv, yv)) = self.spliter(X, y)
-
-        # Separate prices and order books labels.
-        if self.separate_optim:
-            # Handle trainign set
-            prices, V, Po, P = self.split_prices_OB(y)
-
-            print(V.shape, Po.shape, P.shape)            
-            if not transformers_are_fit:
-                # Fit the price transformer - but we don't need transformed
-                # train prices                
-                self.transformer.fit(prices)
-                self.V_transformer.fit(V)
-                
-            # Transform OB prices
-            Pot = self.transformer.transform(Po)
-            Pt = self.transformer.transform(P)                
-            
-            # Fit the volumes transformer and output training volumes
-            Vt = self.V_transformer.transform(V)            
-
-            # Reconstruct order books
-            print(Vt.shape, Pot.shape, Pt.shape)            
-            y = self.reconstruct(Vt, Pot, Pt)
-            print("Reconstructed Order Book shape", y.shape)
-            
-            # Handle validation set - we don't need order book validation!       
-            prices_v, _, _, _ = self.split_prices_OB(yv)
-            
-            # Transform validation real prices
-            yv = self.transformer.transform(prices_v)
-        else:
-            if not transformers_are_fit:
-                self.transformer.fit(y)
-                
-            y = self.transformer.transform(y)                
-            yv = self.transformer.transform(yv)
+    def prepare_for_train(self, X, y):
+        self.transformer.fit(y)
+        y = self.transformer.transform(y)        
         
+        ((X, y), (Xv, yv)) = self.spliter(X, y)        
+                
         NUM_WORKERS = self.n_cpus_
-        train_dataset = EPFDataset(X, y, dtype=self.dtype, N_OUTPUT=self.N_OUTPUT)
-        val_dataset = EPFDataset(Xv, yv, dtype=self.dtype, N_OUTPUT=self.N_PRICES)
-        
+        train_dataset = EPFDataset(X, y, dtype=self.dtype)
+        val_dataset = EPFDataset(Xv, yv, dtype=self.dtype)
         train_loader = DataLoader(
             train_dataset,
             batch_size=self.batch_size, shuffle=self.shuffle_train,
@@ -307,7 +251,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
 
     def prepare_for_test(self, X):        
         NUM_WORKERS = self.n_cpus_
-        test_dataset = EPFDataset(X, dtype=self.dtype, N_OUTPUT=self.N_PRICES)
+        test_dataset = EPFDataset(X, dtype=self.dtype)
         test_loader = DataLoader(test_dataset, batch_size=self.batch_size,
                                  num_workers=NUM_WORKERS)
         return test_loader

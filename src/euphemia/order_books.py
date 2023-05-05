@@ -198,7 +198,7 @@ class LoadedOrderBook(SimpleOrderBook):
                 [supply_volumes, demand_volumes],
                 [supply_prices, demand_prices],
                 ["Supply", "Demand"],
-                [supply_orders, demand_orders],
+                [supply_orders, demand_orders]
                 [range(len(supply_volumes)-1),range(len(demand_volumes)-1, 0, -1)],
                 [lambda x, y: x + y, lambda x, y: x - y]):
             
@@ -235,7 +235,7 @@ class LoadedOrderBook(SimpleOrderBook):
 class TorchOrderBook(SimpleOrderBook):
     """
     Same as SimpleOrderBook but everything is a tensor.
-    Inout orders are regular list of orders that are converted into tensors:
+    Input orders are regular list of orders that are converted into tensors:
     volumes, prices, p0s and signs.
     """
     def __init__(self, orders, dtype=torch.float32, requires_grad=True):

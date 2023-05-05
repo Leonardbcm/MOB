@@ -2,6 +2,7 @@
 
 import itertools
 from sklearn.metrics import mean_absolute_error
+from torchmetrics import SymmetricMeanAbsolutePercentageError
 
 from src.euphemia.orders import *
 from src.euphemia.order_books import *
@@ -16,17 +17,20 @@ import src.models.parallel_scikit as ps
 
 ############## Construct model wrapper and load data
 spliter = MySpliter(365, shuffle=False)
-model_wrapper = OBNWrapper("TEST", "Bruges", country="BE", spliter=spliter,
-                           skip_connection=True,  use_order_books=False,
-                           order_book_size=20, separate_optim=True)
+model_wrapper = OBNWrapper("TEST", "Bruges", country="BE", tboard="CHECK",
+                           spliter=spliter, skip_connection=True,
+                           use_order_books=False,
+                           order_book_size=20, alpha=1/3, beta=1/3, gamma=1/3)
 X, Y = model_wrapper.load_train_dataset()
+print(X.shape)
+print(Y.shape)
 ############## Set some params
 ptemp = model_wrapper.params()
 ptemp["early_stopping"] = None
-ptemp["n_epochs"] = 5
-#ptemp["transformer"] = "BCM"
-ptemp["weight_initializers"] = [BiasInitializer("normal", 30, 40, -500, 3000)]
-ptemp["scale"] = "Clip-Sign"
+ptemp["n_epochs"] = 10
+ptemp["OB_plot"] = os.path.join(model_wrapper.logs_path)
+ptemp["profile"] = True
+
 regr = model_wrapper.make(ptemp)
 (Xtr, Ytr), (Xv, Yv) = model_wrapper.spliter(X, Y)
 ############## Fit model and predict validation set
@@ -34,10 +38,17 @@ ps.set_all_seeds(0)
 print(model_wrapper.logs_path)
 regr.fit(X, Y)
 yhat = model_wrapper.predict_val(regr, Xv)
-np.abs(regr.steps[1][1].model.duals).mean()
-model_wrapper.mae(Yv, yhat)
+print(model_wrapper.logs_path)
+
+model_wrapper.price_mae(Yv, yhat)
 model_wrapper.smape(Yv, yhat)
 model_wrapper.ACC(Yv, yhat)
+
+yhat_tr = model_wrapper.predict_val(regr, Xtr)
+model_wrapper.smape(Ytr, yhat_tr)
+
+SymmetricMeanAbsolutePercentageError()(torch.tensor(Yv), torch.tensor(yhat))
+SymmetricMeanAbsolutePercentageError()(torch.tensor(Ytr), torch.tensor(yhat_tr))
 
 # Test set
 Xt, Yt = model_wrapper.load_test_dataset()

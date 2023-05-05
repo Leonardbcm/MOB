@@ -41,3 +41,4 @@
 %aimport src.analysis.order_book_analysis_utils
 %aimport src.analysis.shrink_order_books_utils
 %aimport src.analysis.utils
+%aimport src.analysis.ob_forecasting_utils

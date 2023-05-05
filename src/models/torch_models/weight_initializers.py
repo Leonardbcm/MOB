@@ -103,8 +103,8 @@ class Initializer(object):
         """
         Transform attributes of this object using the given transformer.
         """
-        if transformer.scaling != '':
-            print(f"Disabling Weight initialization since transformer={transfomer.scaling}")
+        if transformer.__class__.__name__ == 'SignOBNScaler':
+            print(f"Initializing weights to N(0,1) since transformer is obn scaler")
             self.p1 = 0
             self.p2 = 1
 
@@ -166,16 +166,13 @@ class BiasInitializer(Initializer):
         attributes p1 and p2 respectively.        
         """        
         # New data distribution is mean = 0, std = 1!!
-        if transformer.scaling != '':
-            print(f"Disabling Weight initialization since transformer={transformer.scaling}")
-            
+        if transformer.__class__.__name__ == 'SignOBNScaler':
+            print(f"Initializing weights to N(0,1) since transformer is obn scaler")
             self.p1 = 0
-            self.p2 = 1  
+            self.p2 = 1
         
-            self.pmin = transformer.transform(
-                self.pmin * np.ones((1, transformer.n_features_))).min()
-            self.pmax = transformer.transform(
-                self.pmax * np.ones((1, transformer.n_features_))).max()
+            self.pmin = -1
+            self.pmax = 1
 
     def a_copy(self):
         return BiasInitializer(self.fname,

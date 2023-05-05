@@ -1,21 +1,18 @@
 %load aimport
 
 import itertools
-from sklearn.metrics import mean_absolute_error
 
 from src.euphemia.orders import *
 from src.euphemia.order_books import *
 from src.euphemia.solvers import *
 from src.euphemia.ploters import *
 
-from src.models.torch_models.ob_datasets import OrderBookDataset
 from src.analysis.utils import load_real_prices
+from src.analysis.evaluate import ACC, smape, relative_error
+from src.analysis.ob_forecasting_utils import *
+
 from src.models.spliter import MySpliter
 from src.models.torch_wrapper import OBNWrapper
-from src.models.torch_models.torch_obn import SolvingNetwork
-from src.models.torch_models.weight_initializers import *
-import src.models.parallel_scikit as ps
-from src.analysis.evaluate import mae, smape
 
 ############## Construct model wrapper and load data
 spliter = MySpliter(365, shuffle=False)
@@ -75,33 +72,48 @@ ax.legend(); plt.show()
 ############# Inspection
 i = 10; plt.plot(Yv[:, i]); plt.show()
 
-############# Compute dual difference
-winter_to_summer = [datetime.datetime(2016, 3, 27, 2),
-                    datetime.datetime(2017, 3, 26, 2),
-                    datetime.datetime(2018, 3, 25, 2),
-                    datetime.datetime(2019, 3, 31, 2),
-                    datetime.datetime(2020, 3, 29, 2),
-                    datetime.datetime(2021, 3, 28, 2)]
-df = load_real_prices("FR")
+############# Compare Dual difference, OB difference and price difference 
+country = "FR"
+dataset = "Lyon"
+OBs = 20
 
-dual_smapes = np.zeros(Yv.shape[0])
-for idx in range(Yv.shape[0]):
-    date_time = OB_lab.index[int(idx/24)]+datetime.timedelta(hours=idx % 24)
-    if date_time in winter_to_summer:
-        date_time -= datetime.timedelta(hours=24)
-        
-    ref_price = df.loc[date_time, "price"]
-    OB = TorchOrderBook(np.concatenate(
-        (Yv[idx].reshape(-1, 1),
-         Ypo[idx].reshape(-1, 1),
-         Yp[idx].reshape(-1, 1)), axis=1))
-    true_dual = np.array([o.dual_function(ref_price) for o in OB.orders])
+# Load Data
+model_wrapper = OBNWrapper(
+    "TEST", dataset, country=country, spliter=MySpliter(365, shuffle=False),
+    use_order_books=True, order_book_size=OBs, separate_optim=True)
+
+Vloss, Ploss, Poloss, dual_loss, price_loss = compute_losses(model_wrapper)
+plot_losses(Vloss, Ploss, Poloss, dual_loss, price_loss, OBs)
+
+############################# Compute Cor coef
+losses = np.concatenate((Vloss, Vloss.mean(axis=1).reshape(-1, 1),
+                         Ploss, Ploss.mean(axis=1).reshape(-1, 1),
+                         Poloss, Poloss.mean(axis=1).reshape(-1, 1),
+                         dual_loss.reshape(-1, 1),price_loss.reshape(-1, 1)),axis=1)
+coefs = np.corrcoef(losses.transpose())
+plot_corrcoef(Vloss, Ploss, Poloss, dual_loss, price_loss, OBs)
+
+############################# Get coefs for all combination
+countries = ["FR", "DE", "BE", "NL"]
+datasets = ["Lyon", "Munich", "Bruges", "Lahaye"]
+order_book_sizes = [20, 50, 100, 250]
+
+mean_coefs = np.zeros((len(countries), len(order_book_sizes), 3))
+for i, (country, dataset) in enumerate(zip(countries, datasets)):
+    for j, OBs in enumerate(order_book_sizes):
+        model_wrapper = OBNWrapper(
+            "TEST", dataset, country=country, spliter=MySpliter(365, shuffle=False),
+            use_order_books=True, order_book_size=OBs, separate_optim=True)
+
+        Vloss, Ploss, Poloss, dual_loss, price_loss = compute_losses(
+            model_wrapper, relative_error)        
+        losses = np.concatenate(
+            (Vloss, Vloss.mean(axis=1).reshape(-1, 1),
+             Ploss, Ploss.mean(axis=1).reshape(-1, 1),
+             Poloss, Poloss.mean(axis=1).reshape(-1, 1),
+             dual_loss.reshape(-1, 1),price_loss.reshape(-1, 1)),axis=1)
     
-    OBhat = TorchOrderBook(np.concatenate(
-        (Yhatv[idx].reshape(-1, 1),
-         Yhatpo[idx].reshape(-1, 1),
-         Yhatp[idx].reshape(-1, 1)), axis=1))
-    hat_dual = np.array([o.dual_function(ref_price) for o in OBhat.orders])
-    dual_smapes[idx] = 200 * np.abs(true_dual.sum() - hat_dual.sum()) / (true_dual.sum() + hat_dual.sum())
+        coefs = np.corrcoef(losses.transpose())
+        mean_coefs[i, j] = coefs[[OBs, 2*(OBs)+1, 3*(OBs)+1], -1]
 
-
+np.save(os.path.join(os.environ["MOB"], "coeffs.npy"), mean_coefs)

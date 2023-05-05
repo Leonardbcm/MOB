@@ -1,7 +1,6 @@
 %load aimport
 
-import torch
-import numpy as np
+import torch, pandas, numpy as np, os
 from torch import nn
 import torchvision.models as models
 from torch.profiler import profile, record_function, ProfilerActivity
@@ -12,39 +11,27 @@ from src.models.spliter import MySpliter
 from src.models.torch_wrapper import OBNWrapper
 import src.models.parallel_scikit as ps
 
-######################### Test profiling
-model = models.resnet18()
-inputs = torch.randn(5, 3, 224, 224)
-
-with profile(
-        on_trace_ready=torch.profiler.tensorboard_trace_handler('./log/resnet20'),
-        activities=[ProfilerActivity.CPU],
-        with_stack=True,
-        record_shapes=True) as prof:    
-    with record_function("model_inference"):
-        model(inputs)
-
-print(prof.key_averages(
-    group_by_input_shape=True).table(sort_by="self_cpu_time_total", row_limit=30))
+from src.models.torch_models.torch_obn import parse_key_averages_output, filter_key_averages
 
 ########################## Profile models
-i = -1
-
 spliter = MySpliter(365, shuffle=False)
-model_wrapper = OBNWrapper("TEST", "Lyon", spliter=spliter)
+model_wrapper = OBNWrapper("TEST", "Bruges", country="BE", spliter=spliter,
+                           skip_connection=True,  use_order_books=False,
+                           order_book_size=20, alpha=0.33, beta=0.33, gamma=0.33)
 X, Y = model_wrapper.load_train_dataset()
 ptemp = model_wrapper.params()
-ptemp["n_epochs"] = 1
+ptemp["n_epochs"] = 10
 
-i += 1
 def trace_handler(p):
-    print(p.key_averages(group_by_stack_n=5).table(
-        row_limit=300)) 
-    torch.profiler.tensorboard_trace_handler(f'log/obn_{i}')(p)
+    out = p.key_averages(group_by_stack_n=5)
+    print(out)
+    df = filter_key_averages(out)
+    df.to_csv(os.path.join(model_wrapper.logs_path,f"table_{model_wrapper.ID}.csv"))
+    torch.profiler.tensorboard_trace_handler(model_wrapper.logs_path)(p)
     
 profiler = profile(
     activities=[ProfilerActivity.CPU],
-    schedule=torch.profiler.schedule(wait=3, warmup=10, active=1, repeat=1),
+    schedule=torch.profiler.schedule(wait=3, warmup=2, active=25, repeat=1),
     on_trace_ready=trace_handler)
 ptemp["profile"] = profiler
 
@@ -52,12 +39,10 @@ regr = model_wrapper.make(ptemp)
 (Xt, Yt), (Xv, Yv) = model_wrapper.spliter(X, Y)
 ps.set_all_seeds(0)
 
-with profiler:    
+with profiler as prof:    
     regr.fit(X, Y)
 
-yhat = model_wrapper.predict_val(regr, Xv)
-
-mean_absolute_error(Yv, yhat)
+print(model_wrapper.logs_path)
 
 ############################# TEST
 class MyModule(nn.Module):

@@ -10,9 +10,8 @@ class EPFDataset(Dataset):
     """
     Helps constructing DataLoaders
     """
-    def __init__(self, X, Y=None, dtype=torch.float32, N_OUTPUT=24):
+    def __init__(self, X, Y=None, dtype=torch.float32):
         self.dtype = dtype
-        self.N_OUTPUT = N_OUTPUT
         self.X = torch.tensor(X.astype(float), dtype = dtype)
 
         if Y is not None:
