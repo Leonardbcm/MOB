@@ -12,7 +12,8 @@ def cmap():
     rgb_color_map = mpl.colors.ListedColormap(rgb_color_map)
     return rgb_color_map
 
-def plot_DM_tests(pvalues, countries=[], IDs=[], label="", labels_fontsize=15):    
+def plot_DM_tests(pvalues, countries=[], IDs=[], label="",
+                  labels_fontsize=15):    
     fig, axes = plt.subplots(2, 2, figsize=(19.2, 10.8))
     axes = axes.flatten()
 
@@ -26,26 +27,30 @@ def plot_DM_tests(pvalues, countries=[], IDs=[], label="", labels_fontsize=15):
             country = ""
         
         ax = axes[i]
+
+        #### Remove nan columns
+        mask = np.array([not np.isnan(ps[i]).all() for i in range(ps.shape[0])])
+        ps = ps[mask, :][:, mask]
         
         #### Display the pvalues
         if has_data:
-            im = ax.imshow(ps, cmap=cmap(), vmin=0, vmax=0.1)
+            im = ax.imshow(ps, cmap=cmap(), vmin=0, vmax=0.05)
 
         ##### Format the plot
         ax.set_title(country)
 
         # X ticks
-        ax.set_xticks(range(len(IDs)))
-        ax.set_xticklabels(IDs, fontsize=labels_fontsize)
+        ax.set_xticks(range(len(IDs[mask])))
+        ax.set_xticklabels(IDs[mask], fontsize=labels_fontsize)
         ax.set_xlabel("Model ID")
 
         # Y ticks
-        ax.set_yticks(range(len(IDs)))
-        ax.set_yticklabels(IDs, fontsize=labels_fontsize)
+        ax.set_yticks(range(len(IDs[mask])))
+        ax.set_yticklabels(IDs[mask], fontsize=labels_fontsize)
         ax.set_ylabel("Model ID")        
 
         # Crosses on the diagonal
-        ax.plot(range(len(IDs)), range(len(IDs)), 'wx')
+        ax.plot(range(len(IDs[mask])), range(len(IDs[mask])), 'wx')
 
     # Display the colorbar
     cbar = plt.colorbar(im, ax=axes, orientation="horizontal", fraction=0.05,

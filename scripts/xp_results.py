@@ -104,34 +104,15 @@ for j, (country, dataset) in enumerate(zip(countries, datasets)):
 results = results.sort_values(["country", "ID"]).loc[:, ["country", "ID", "val_OB_smape", "val_OB_ACC", "val_price_mae", "val_price_smape", "val_price_ACC"]]
 print(df_to_latex(results.set_index(["country", "ID"]), roundings=[2, 2, 3, 2, 2, 3], hlines=False))
 
-
 ####### Compute DM tests
-n_prices = 6
-n_OBs = 4
-
-prices_pvalues = np.zeros((nc, n_prices, n_prices))
-OB_pvalues = np.zeros((nc, n_OBs, n_OBs))
+prices_pvalues = np.ones((nc, n, n)) * np.nan
+OB_pvalues = np.ones((nc, n, n))  * np.nan
 
 for i, (country, dataset) in enumerate(zip(countries, datasets)):
-    current_prices_1 = -1
-    current_OB_1 = -1
-
-    IDs_prices = []
-    IDs_OBs = []    
     for j, ID1 in enumerate(IDs):
         model_wrapper_1 = OBNWrapper(
             "RESULTS", dataset, country=country, IDn=ID1, tboard="RESULTS",
             skip_connection=True, use_order_books=False, order_book_size=OBs)
-
-        if model_wrapper_1.gamma > 0:
-            current_OB_1 += 1
-            IDs_OBs.append(ID1)            
-        if not model_wrapper_1.predict_order_books:
-            current_prices_1 += 1
-            IDs_prices.append(ID1)
-            
-        current_prices_2 = 0
-        current_OB_2 = 0
         
         for k, ID2 in enumerate(IDs):
             model_wrapper_2 = OBNWrapper(
@@ -140,36 +121,35 @@ for i, (country, dataset) in enumerate(zip(countries, datasets)):
 
             # Compute the DM test on the Orderbooks
             if (model_wrapper_1.gamma > 0) and (model_wrapper_2.gamma > 0):
-                Y = real_OB[i, current_OB_1]
+                Y = real_OB[i, j]
                 Yhat1 = predicted_OB[i, j]
-                Yhat2 = predicted_OB[i, k]                
+                Yhat2 = predicted_OB[i, k]
                 if ID1 == ID2:
-                    OB_pvalue = np.nan
+                    OB_pvalue = 1
                 else:
                     OB_pvalue = DM(Y, Yhat1, Yhat2, norm="smape")
                     
-                OB_pvalues[i, current_OB_1, current_OB_2] = OB_pvalue
-                current_OB_2 += 1                
+                OB_pvalues[i, j, k] = OB_pvalue        
 
             # Compute the DM test on the Prices
             if (not model_wrapper_1.predict_order_books) and (not model_wrapper_2.predict_order_books):
-                Y = real_prices[i, current_prices_1]
+                Y = real_prices[i, j]
                 Yhat1 = predicted_prices[i, j]
                 Yhat2 = predicted_prices[i, k]                
                 if ID1 == ID2:
-                    prices_pvalue = np.nan
+                    prices_pvalue = 1
                 else:
                     prices_pvalue = DM(Y, Yhat1, Yhat2, norm="mae")
                     
-                prices_pvalues[i, current_prices_1,current_prices_2] = prices_pvalue
-                current_prices_2 += 1
+                prices_pvalues[i, j, k] = prices_pvalue
 
 with matplotlib.rc_context({ "text.usetex" : True,
                              "text.latex.preamble" : r"\usepackage[bitstream-charter]{mathdesign} \usepackage[T1]{fontenc} \usepackage{mathtools}",
                              "font.family" : ""}):
     plt.close("all")    
     plot_DM_tests(
-        prices_pvalues, countries=countries, IDs=IDs_prices, label="prices")
+        prices_pvalues, countries=countries, 
+        IDs=np.arange(1, 8), label="prices")
     plt.show()
 
 with matplotlib.rc_context({ "text.usetex" : True,
@@ -177,6 +157,6 @@ with matplotlib.rc_context({ "text.usetex" : True,
                              "font.family" : ""}):
     plt.close("all")    
     plot_DM_tests(
-    OB_pvalues, countries=countries, IDs=IDs_OBs, label="Order Books")
+    OB_pvalues, countries=countries, IDs=np.arange(1, 8), label="Order Books")
     plt.show()
     

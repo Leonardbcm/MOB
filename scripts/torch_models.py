@@ -21,7 +21,7 @@ model_wrapper = OBNWrapper("TEST", "Lyon", country="FR", tboard="RESULTS",
                            spliter=spliter, skip_connection=True,
                            use_order_books=False,
                            order_book_size=20,
-                           IDn = 3)
+                           IDn = 1)
                            #alpha=0, beta=0, gamma=1)
 X, Y = model_wrapper.load_train_dataset()
 print(X.shape)
@@ -54,6 +54,19 @@ Xt, Yt = model_wrapper.load_test_dataset()
 ythat = model_wrapper.predict_test(regr, Xt)
 np.abs(regr.steps[1][1].model.duals).mean()
 model_wrapper.smape(Yt, ythat)
+
+############## CHECK IDs
+for IDn in [1, 2, 3, 4, 5, 6,7]:
+    spliter = MySpliter(365, shuffle=False)    
+    model_wrapper = OBNWrapper("TEST", "Lahaye", country="NL", tboard="RESULTS",
+                               skip_connection=True, use_order_books=False,
+                               order_book_size=20, IDn = IDn, spliter=spliter)
+    X, Y = model_wrapper.load_train_dataset()
+    (Xtr, Ytr), (Xv, Yv) = model_wrapper.spliter(X, Y)
+    regr = model_wrapper.make(model_wrapper.params())
+
+    yhatv = model_wrapper.load_predict(regr, Xv, model_wrapper.highest_version)
+    print(f"INPUT IDn {IDn} | alpha {regr.steps[1][1].alpha} | beta {regr.steps[1][1].beta} | gamma {regr.steps[1][1].gamma} | LOADED ID {regr.steps[1][1].ID}")
 
 ############## Datasets
 for y, l, c in zip([Ytr, Yv, Yt], ["train", "validation", "test"], ["b", "r", "g"]):

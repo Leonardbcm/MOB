@@ -20,10 +20,10 @@ class TestTorchModel():
     @pytest.mark.parametrize(
         "country, dataset",
         #[["FR", "Lyon"], ["DE", "Munich"], ["NL", "Lahaye"], ["BE", "Bruges"]])
-        [["FR", "Lyon"]])
-    @pytest.mark.parametrize("OBs", [20])
+        [["BE", "Bruges"]])
+    @pytest.mark.parametrize("OBs", [50, 100, 250])
     @pytest.mark.parametrize(
-        "IDn", [8, 9, 10, 11, 12, 13])
+        "IDn", [1, 2, 3, 4, 5, 6,7])
     def test_routine(self, country, dataset, OBs, IDn):
         model_wrapper = self.get_model(country, dataset, OBs, IDn)
         X, Y = model_wrapper.load_train_dataset()

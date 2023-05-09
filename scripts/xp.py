@@ -29,6 +29,13 @@ CHECK_PARAMS = {
 ####### CHOOSE XP OR CHECK MODE
 PARAMS = CHECK_PARAMS
 
+####### configurations
+#countries = ["FR", "DE", "BE", "NL"]
+#datasets = ["Lyon", "Munich", "Bruges", "Lahaye"]
+countries = ["FR", "BE"]
+datasets = ["Lyon", "Bruges"]
+IDs = [1, 2, 3, 4, 5, 6, 7]
+OBs = 50
 ####### Results container
 results = pandas.DataFrame(
     columns=[
@@ -36,11 +43,6 @@ results = pandas.DataFrame(
         "val_price_mae", "val_price_smape", "val_price_ACC", "val_OB_smape",
         "val_OB_ACC",    
         "training_time"])
-####### configurations
-countries = ["FR", "DE", "BE", "NL"]
-datasets = ["Lyon", "Munich", "Bruges", "Lahaye"]
-IDs = [1, 2, 3, 4, 5, 6, 7]
-OBs = 20
 ######## For storing results
 n = 7
 for i, ID in enumerate(IDs):

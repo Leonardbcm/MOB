@@ -129,8 +129,10 @@ class TorchWrapper(ModelWrapper):
         
         trainer = regr.steps[1][1].trainer
         model = regr.steps[1][1].model        
-        yhat = trainer.predict(
-            model, test_loader,ckpt_path=self.latest_checkpoint(version))           
+        predictions = trainer.predict(
+            model, test_loader,ckpt_path=self.latest_checkpoint(version))
+
+        return predictions
         
     def get_real_prices(self, dataset="validation"):
         """
