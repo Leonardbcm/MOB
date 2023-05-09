@@ -32,9 +32,18 @@ def get_model_wrappers(combinations, countries, datasets, spliter):
             model_wrappers += [model_wrapper]
     return model_wrappers
 
+def handle_latex_string(header):
+    splits = header.split("_")
+    ss = ""
+    for s in splits:
+        ss += s + "\_"
+    
+    return ss[:-2]
+
 def df_to_latex(df, index=True, index_col="", hlines=True, roundings=[],
                 highlight=[]):    
     headers = [index_col] + list(df.columns)
+    headers = [handle_latex_string(h) for h in headers]
     nc = len(headers)
     col_params = "|"
     tab_cols = ""
@@ -74,6 +83,7 @@ def df_to_latex(df, index=True, index_col="", hlines=True, roundings=[],
         """
 
     rows = list(df.index)
+    print(rows)
     nr = len(rows)
     for row in rows:
         # Add the index in first column
@@ -81,7 +91,7 @@ def df_to_latex(df, index=True, index_col="", hlines=True, roundings=[],
         if index:
             i_row = "\\textbf{" + i_row + "}"
         s += i_row
-        values = df.loc[row].values
+        values = df.loc[row].values        
         for v, highlight_, col, rounding in zip(
                 values, highlight, df.columns, roundings):
             str_v = str(round(v, ndigits=rounding))

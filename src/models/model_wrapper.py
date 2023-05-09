@@ -116,14 +116,21 @@ class ModelWrapper(object):
     def shuffle_train(self):
         return True
 
+    @property
+    def coefficients(self):
+        return np.array([[1, 0, 0], [0, 0, 1], [0.5, 0, 0.5],
+                         [0, 1, 0], [0, 0.5, 0.5], [0.5, 0.5, 0],
+                         [1/3, 1/3, 1/3],
+                         [0.05, 0.475, 0.475], [0.1, 0.45, 0.45],
+                         [0.15, 0.425, 0.425], [0.2, 0.4, 0.4],
+                         [0.25, 0.375, 0.375], [0.3, 0.35, 0.35],
+        ])        
+    
     def get_coefficients(self, IDn):
         """
         Return alpha, beta, gamma according to the given ID number
-        """
-        coefficients = np.array([[1, 0, 0], [0, 0, 1], [0, 1, 0],
-                                 [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5],
-                                 [1/3, 1/3, 1/3]])
-        return coefficients[IDn - 1]
+        """        
+        return self.coefficients[IDn - 1]
     
     def save_name(self):
         return mu.save_name(self.prefix, self.dataset_name)

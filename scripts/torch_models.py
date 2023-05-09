@@ -17,11 +17,11 @@ import src.models.parallel_scikit as ps
 
 ############## Construct model wrapper and load data
 spliter = MySpliter(365, shuffle=False)
-model_wrapper = OBNWrapper("TEST", "Bruges", country="BE", tboard="CHECK",
+model_wrapper = OBNWrapper("TEST", "Lyon", country="FR", tboard="RESULTS",
                            spliter=spliter, skip_connection=True,
                            use_order_books=False,
                            order_book_size=20,
-                           IDn = 1)
+                           IDn = 3)
                            #alpha=0, beta=0, gamma=1)
 X, Y = model_wrapper.load_train_dataset()
 print(X.shape)
@@ -67,7 +67,7 @@ plt.show()
 ############## LOAD from a checkpoint and retrain or predict
 ptemp["n_epochs"] = 15
 model_wrapper.load_refit(regr, X, Y, "version_2")
-model_wrapper.load_predict(regr, X, "version_2")
+model_wrapper.load_predict(regr, X, "version_0")
 
 ############## Try options
 parameters = {}

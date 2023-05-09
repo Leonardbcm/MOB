@@ -1,13 +1,31 @@
-import matplotlib.pyplot as plt
 import matplotlib as mpl
-import pandas as pd
-import os, math
-import numpy as np, pandas
-import itertools
 from matplotlib.colors import ListedColormap
 from matplotlib import cm
+import pandas as pd, os, math, numpy as np, pandas, itertools, matplotlib.pyplot as plt
+from scipy import stats
 
 from sklearn.metrics import mean_absolute_error, mean_absolute_percentage_error, mean_squared_error
+
+def DM(ytrue, ypred_1, ypred_2, norm="smape"):
+    e1 = ytrue - ypred_1
+    e2 = ytrue - ypred_2
+
+    # Computing the loss differential series for the multivariate test
+    if norm == "mae":
+        d = np.mean(np.abs(e1), axis=1) - np.mean(np.abs(e2), axis=1)
+    if norm == "smape":
+        d1=(200*np.abs(e1)/ (np.abs(ytrue) + np.abs(ypred_1) + 0.0001)).mean(axis=1)
+        d2=(200*np.abs(e2)/(np.abs(ytrue) + np.abs(ypred_2) + 0.0001)).mean(axis=1)
+        d = d1 - d2
+
+    # Computing the test statistic
+    mu = d.mean()
+    sigma = d.var()
+    DMs = mu / np.sqrt(sigma / d.size)
+
+    # Compute the pvalue
+    p_value = 1 - stats.norm.cdf(DMs)
+    return p_value
 
 def absolute_error(ytrue, ypred):
     return np.abs(ytrue - ypred)

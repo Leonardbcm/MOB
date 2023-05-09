@@ -3,13 +3,18 @@ import pytest, os
 from src.models.spliter import MySpliter
 from src.models.torch_wrapper import OBNWrapper
 
+####### MAIN PARAMS
+N_EPOCHS = 1
+N_SAMPLES = 10
+N_VAL = 4
+BATCH = 2
+
 class TestTorchModel():
-    def get_model(self, country, dataset, OBs, alpha, beta, gamma):
-        spliter = MySpliter(10, shuffle=False)
+    def get_model(self, country, dataset, OBs, IDn):
+        spliter = MySpliter(N_VAL, shuffle=False)
         model_wrapper = OBNWrapper("TEST", dataset, country=country,spliter=spliter,
                                    skip_connection=True,  use_order_books=False,
-                                   order_book_size=OBs, tboard="TEST", 
-                                   alpha=alpha, beta=beta, gamma=gamma)
+                                   order_book_size=OBs, tboard="TEST", IDn=IDn)
         return model_wrapper
     
     @pytest.mark.parametrize(
@@ -18,16 +23,13 @@ class TestTorchModel():
         [["FR", "Lyon"]])
     @pytest.mark.parametrize("OBs", [20])
     @pytest.mark.parametrize(
-        "alpha, beta, gamma",
-        [[1, 0, 0], [0, 0, 1], [0, 1, 0],
-         [0.5, 0.5, 0], [0.5, 0, 0.5], [0, 0.5, 0.5],
-         [1/3, 1/3, 1/3]])
-    def test_routine(self, country, dataset, OBs, alpha, beta, gamma):
-        model_wrapper = self.get_model(country, dataset, OBs, alpha, beta, gamma)
+        "IDn", [8, 9, 10, 11, 12, 13])
+    def test_routine(self, country, dataset, OBs, IDn):
+        model_wrapper = self.get_model(country, dataset, OBs, IDn)
         X, Y = model_wrapper.load_train_dataset()
-        X = X[0:40, :]
-        Y = Y[0:40, :]        
-
+        X = X[:N_SAMPLES, :]
+        Y = Y[:N_SAMPLES, :]
+        
         # Check that the input data shapes is well computed
         a = model_wrapper.N_X
         b = X.shape[1]
@@ -40,8 +42,6 @@ class TestTorchModel():
         if (not model_wrapper.use_order_books) and model_wrapper.OB_in_X:
             b -= 72 * model_wrapper.OBs
         assert a == b, f"model_wrapper.N_INPUT != N_INPUT - 72OBs * predict order books, {a}!={b}"        
-
-
         
         # Check that the output data shapes is well computed        
         a = model_wrapper.N_Y
@@ -82,10 +82,10 @@ class TestTorchModel():
         ######### TEST MAKE
         ptemp = model_wrapper.params()
         ptemp["early_stopping"] = None
-        ptemp["n_epochs"] = 1
+        ptemp["n_epochs"] = N_EPOCHS
         ptemp["OB_plot"] = os.path.join(model_wrapper.logs_path)
         ptemp["profile"] = True
-        ptemp["batch_size"] = 2
+        ptemp["batch_size"] = BATCH
 
         try:
             regr = model_wrapper.make(ptemp)

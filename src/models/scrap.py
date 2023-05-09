@@ -65,7 +65,7 @@ class TestOBNScalerWithoutOB():
         ])
         
         assert np.array_equal(X, expected_X), "The split_OB method should return the correct X component."
-        assert V.shape[1] == 0, "The split_OB method should return the correct V component."
+        assert V.shape[1] == 0, "The splitw_OB method should return the correct V component."
         assert Po.shape[1] == 0, "The split_OB method should return the correct Po component."
         assert P.shape[1] == 0, "The split_OB method should return the correct P component."
 

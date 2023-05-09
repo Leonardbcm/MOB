@@ -17,10 +17,10 @@ from src.models.torch_models.torch_obn import parse_key_averages_output, filter_
 spliter = MySpliter(365, shuffle=False)
 model_wrapper = OBNWrapper("TEST", "Bruges", country="BE", spliter=spliter,
                            skip_connection=True,  use_order_books=False,
-                           order_book_size=20, alpha=0.33, beta=0.33, gamma=0.33)
+                           order_book_size=20, alpha=1/3, beta=1/3, gamma=1/3)
 X, Y = model_wrapper.load_train_dataset()
 ptemp = model_wrapper.params()
-ptemp["n_epochs"] = 10
+ptemp["n_epochs"] = 1
 
 def trace_handler(p):
     out = p.key_averages(group_by_stack_n=5)
@@ -41,6 +41,8 @@ ps.set_all_seeds(0)
 
 with profiler as prof:    
     regr.fit(X, Y)
+
+yhat = model_wrapper.predict_val(regr, Xv)    
 
 print(model_wrapper.logs_path)
 

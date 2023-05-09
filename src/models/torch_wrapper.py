@@ -35,13 +35,17 @@ class TorchWrapper(ModelWrapper):
             IDn=IDn)
         self.tboard = tboard
 
+    @property
+    def ID(self):
+        return self.country + "_" + str(self.IDn) + "_" + str(self.order_book_size)
+
     def validation_prediction_path(self):
-        return os.path.join(mu.folder(self.dataset_name),
-                            self.ID + "_validation_predictions.csv")
-    
+        return os.path.join(self.logs_path, self.latest_version,
+                     "validation_predictions.csv")
+
     def test_prediction_path(self):
-        return os.path.join(mu.folder(self.dataset_name),
-                            self.ID + "_test_predictions.csv")
+        return os.path.join(self.logs_path, self.latest_version,
+                            "test_predictions.csv")         
     
     @property
     def logs_path(self):
@@ -145,12 +149,15 @@ class TorchWrapper(ModelWrapper):
     
         return pandas.DataFrame(Y, index=dates)
 
-    def get_predictions(self, dataset="validation"):
+    def get_predictions(self, version, dataset="validation"):
         if dataset == "validation":
-            path = self.validation_prediction_path()
+            path = os.path.join(
+                self.logs_path, version,
+                "validation_predictions.csv")
         else:
-            path = self.test_prediction_path()
-            
+            path = os.path.join(
+                self.logs_path, version,
+                "recalibrated_test_predictions.csv")            
         try:
             ypred = pandas.read_csv(path, index_col="Unnamed: 0")
         except:
@@ -265,28 +272,6 @@ class OBNWrapper(TorchWrapper):
             
         ############ Init indices
         self.init_indices()
-
-    @property
-    def ID(self):
-        ID = self.country + "_"
-
-        if (self.alpha == 1) and (self.gamma == 0) and (self.beta == 0):
-            model_number = 1
-        if (self.alpha == 0) and (self.gamma == 1) and (self.beta == 0):
-            model_number = 2
-        if (self.alpha == 0.5) and (self.gamma == 0.5) and (self.beta == 0):
-            model_number = 3            
-        if (self.alpha == 0) and (self.gamma == 0) and (self.beta == 1):
-            model_number = 4
-        if (self.alpha == 0) and (self.gamma == 0.5) and (self.beta == 0.5):
-            model_number = 5
-        if (self.alpha == 0.5) and (self.gamma == 0) and (self.beta == 0.5):
-            model_number = 6
-        if (self.alpha == 1/3) and (self.gamma == 1/3) and (self.beta == 1/3):
-            model_number = 7
-            
-        ID += str(model_number) + "_" + str(self.order_book_size)
-        return ID
         
     def params(self):
         self.load_coeffs()
@@ -424,7 +409,7 @@ class OBNWrapper(TorchWrapper):
             out = p.key_averages(group_by_stack_n=5)
             df = filter_key_averages(out)
             df.to_csv(os.path.join(
-                self.logs_path, self.latest_version, f"table_{self.ID}.csv"))
+                self.logs_path, self.latest_version, f"profiler_table.csv"))
             torch.profiler.tensorboard_trace_handler(
                 os.path.join(self.logs_path, self.latest_version))(p)
     

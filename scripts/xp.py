@@ -10,10 +10,24 @@ Main XP file. For each listed configuration evaluate the base params on all
 datasets.
 """
 ####### MAIN PARAMS
-N_EPOCHS = 1000
-N_SAMPLES = 1444
-N_VAL = 365
-BATCH = 80
+XP_PARAMS = {
+    "N_EPOCHS": 1000,
+    "N_SAMPLES": 1444,
+    "N_VAL": 365,
+    "BATCH" : 80,
+    "tboard" : XP,
+}
+
+CHECK_PARAMS = {
+    "N_EPOCHS": 1,
+    "N_SAMPLES": 10,
+    "N_VAL": 4,
+    "BATCH" : 2,
+    "tboard" : "CHECK",    
+}
+
+####### CHOOSE XP OR CHECK MODE
+PARAMS = CHECK_PARAMS
 
 ####### Results container
 results = pandas.DataFrame(
@@ -26,28 +40,30 @@ results = pandas.DataFrame(
 countries = ["FR", "DE", "BE", "NL"]
 datasets = ["Lyon", "Munich", "Bruges", "Lahaye"]
 IDs = [1, 2, 3, 4, 5, 6, 7]
+OBs = 20
 ######## For storing results
 n = 7
 for i, ID in enumerate(IDs):
     for j, (country, dataset) in enumerate(zip(countries, datasets)):
-        spliter = MySpliter(N_VAL, shuffle=False)        
+        spliter = MySpliter(PARAMS["N_VAL"], shuffle=False)        
         model_wrapper = OBNWrapper(
             "XP", dataset, spliter=spliter, country=country, skip_connection=True,
-            use_order_books=False, order_book_size=20, IDn=ID, tboard="")
+            use_order_books=False, order_book_size=OBs, IDn=ID,
+            tboard=PARAMS["tboard"])
         
         print(model_wrapper.logs_path)
 
         # Load train dataset
         X, Y = model_wrapper.load_train_dataset()
-        X = X[:N_SAMPLES, :]
-        Y = Y[:N_SAMPLES, :]
+        X = X[:PARAMS["N_SAMPLES"], :]
+        Y = Y[:PARAMS["N_SAMPLES"], :]
         (_, _), (Xv, Yv) = model_wrapper.spliter(X, Y)
 
         # Create the model with the default params
         default_params = model_wrapper.params()        
         default_params["early_stopping"] = None
-        default_params["n_epochs"] = N_EPOCHS
-        default_params["batch_size"] = BATCH        
+        default_params["n_epochs"] = PARAMS["N_EPOCHS"]
+        default_params["batch_size"] = PARAMS["BATCH"]        
         default_params["OB_plot"] = False
         default_params["profile"] = False
         regr = model_wrapper.make(default_params)
@@ -80,11 +96,6 @@ for i, ID in enumerate(IDs):
         train_dates, validation_dates = spliter(model_wrapper.train_dates)
         pandas.DataFrame(yvpred, index=validation_dates).to_csv(
             model_wrapper.validation_prediction_path())
-
-        # Also save in the log folder
-        pandas.DataFrame(yvpred, index=validation_dates).to_csv(
-            os.path.join(model_wrapper.logs_path, model_wrapper.latest_version,
-                         "validation_predictions.csv"))        
 
         res = pandas.DataFrame({
             "country" : country,
