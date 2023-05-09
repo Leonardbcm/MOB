@@ -15,7 +15,7 @@ XP_PARAMS = {
     "N_SAMPLES": 1444,
     "N_VAL": 365,
     "BATCH" : 80,
-    "tboard" : XP,
+    "tboard" : "XP",
 }
 
 CHECK_PARAMS = {
@@ -32,9 +32,9 @@ PARAMS = CHECK_PARAMS
 ####### configurations
 #countries = ["FR", "DE", "BE", "NL"]
 #datasets = ["Lyon", "Munich", "Bruges", "Lahaye"]
-countries = ["FR", "BE"]
-datasets = ["Lyon", "Bruges"]
-IDs = [1, 2, 3, 4, 5, 6, 7]
+countries = ["BE"]
+datasets = ["Bruges"]
+IDs = [7]
 OBs = 50
 ####### Results container
 results = pandas.DataFrame(
