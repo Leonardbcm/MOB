@@ -15,7 +15,7 @@ XP_PARAMS = {
     "N_SAMPLES": 1444,
     "N_VAL": 365,
     "BATCH" : 80,
-    "tboard" : "XP",
+    "tboard" : "SEEDS",
 }
 
 CHECK_PARAMS = {
@@ -23,7 +23,7 @@ CHECK_PARAMS = {
     "N_SAMPLES": 10,
     "N_VAL": 4,
     "BATCH" : 2,
-    "tboard" : "CHECK",    
+    "tboard" : "SEEDS",
 }
 
 ####### CHOOSE XP OR CHECK MODE
@@ -34,12 +34,13 @@ PARAMS = CHECK_PARAMS
 #datasets = ["Lyon", "Munich", "Bruges", "Lahaye"]
 countries = ["FR"]
 datasets = ["Lyon"]
-IDs = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13]
-OB_sizes = [20, 50]
+IDs = [7]
+OB_sizes = [20]
+seeds = [0, 1, 2, 3, 4]
 ####### Results container
 results = pandas.DataFrame(
     columns=[
-        "country", "ID", "OBs",
+        "country", "ID", "OBs", "seed",
         "val_price_mae", "val_price_smape", "val_price_ACC", "val_OB_smape",
         "val_OB_ACC",    
         "training_time"])
@@ -48,71 +49,74 @@ n = len(IDs)
 nObs = len(OB_sizes)
 for i, ID in enumerate(IDs):
     for k, OBs in enumerate(OB_sizes):
-        for j, (country, dataset) in enumerate(zip(countries, datasets)):        
-            spliter = MySpliter(PARAMS["N_VAL"], shuffle=False)        
-            model_wrapper = OBNWrapper(
-                "XP",dataset,spliter=spliter, country=country, skip_connection=True,
-                use_order_books=False, order_book_size=OBs, IDn=ID,
-                tboard=PARAMS["tboard"])
+        for j, (country, dataset) in enumerate(zip(countries, datasets)):
+            for seed in seeds:
+                spliter = MySpliter(PARAMS["N_VAL"], shuffle=False)        
+                model_wrapper = OBNWrapper(
+                    "XP",dataset,spliter=spliter, country=country,
+                    skip_connection=True,
+                    use_order_books=False, order_book_size=OBs, IDn=ID,
+                    tboard=PARAMS["tboard"])
         
-            print(model_wrapper.logs_path)
+                print(model_wrapper.logs_path)
 
-            # Load train dataset
-            X, Y = model_wrapper.load_train_dataset()
-            X = X[:PARAMS["N_SAMPLES"], :]
-            Y = Y[:PARAMS["N_SAMPLES"], :]
-            (_, _), (Xv, Yv) = model_wrapper.spliter(X, Y)
+                # Load train dataset
+                X, Y = model_wrapper.load_train_dataset()
+                X = X[:PARAMS["N_SAMPLES"], :]
+                Y = Y[:PARAMS["N_SAMPLES"], :]
+                (_, _), (Xv, Yv) = model_wrapper.spliter(X, Y)
+                
+                # Create the model with the default params
+                default_params = model_wrapper.params()        
+                default_params["early_stopping"] = None
+                default_params["n_epochs"] = PARAMS["N_EPOCHS"]
+                default_params["batch_size"] = PARAMS["BATCH"]        
+                default_params["OB_plot"] = False
+                default_params["profile"] = False
+                regr = model_wrapper.make(default_params)
+                
+                # Fit the model
+                start = time.time()
+                ps.set_all_seeds(seed)            
+                regr.fit(X, Y)
+                stop = time.time()
+                
+                # Predict validation data and compute errors
+                yvpred = model_wrapper.predict_val(regr, Xv)
+                
+                if not model_wrapper.predict_order_books:
+                    price_mae = model_wrapper.price_mae(Yv, yvpred)
+                    price_smape = model_wrapper.price_smape(Yv, yvpred)        
+                    price_acc = model_wrapper.price_ACC(Yv, yvpred)
+                else:
+                    price_mae = np.nan
+                    price_smape = np.nan
+                    price_acc = np.nan
 
-            # Create the model with the default params
-            default_params = model_wrapper.params()        
-            default_params["early_stopping"] = None
-            default_params["n_epochs"] = PARAMS["N_EPOCHS"]
-            default_params["batch_size"] = PARAMS["BATCH"]        
-            default_params["OB_plot"] = False
-            default_params["profile"] = False
-            regr = model_wrapper.make(default_params)
+                if model_wrapper.gamma > 0:
+                    OB_smape = model_wrapper.OB_smape(Yv, yvpred)        
+                    OB_acc = model_wrapper.OB_ACC(Yv, yvpred)
+                else:
+                    OB_smape = np.nan
+                    OB_acc = np.nan
+                    
+                # Save validation data
+                train_dates, validation_dates = spliter(model_wrapper.train_dates)
+                pandas.DataFrame(yvpred, index=validation_dates).to_csv(
+                    model_wrapper.validation_prediction_path())
 
-            # Fit the model
-            start = time.time()
-            ps.set_all_seeds(0)            
-            regr.fit(X, Y)
-            stop = time.time()
-
-            # Predict validation data and compute errors
-            yvpred = model_wrapper.predict_val(regr, Xv)
-        
-            if not model_wrapper.predict_order_books:
-                price_mae = model_wrapper.price_mae(Yv, yvpred)
-                price_smape = model_wrapper.price_smape(Yv, yvpred)        
-                price_acc = model_wrapper.price_ACC(Yv, yvpred)
-            else:
-                price_mae = np.nan
-                price_smape = np.nan
-                price_acc = np.nan
-
-            if model_wrapper.gamma > 0:
-                OB_smape = model_wrapper.OB_smape(Yv, yvpred)        
-                OB_acc = model_wrapper.OB_ACC(Yv, yvpred)
-            else:
-                OB_smape = np.nan
-                OB_acc = np.nan
-
-            # Save validation data
-            train_dates, validation_dates = spliter(model_wrapper.train_dates)
-            pandas.DataFrame(yvpred, index=validation_dates).to_csv(
-                model_wrapper.validation_prediction_path())
-
-            res = pandas.DataFrame({
-                "country" : country,
-                "ID" : ID,
-                "OBs" : OBs,                                        
-                "val_price_mae" : price_mae,
-                "val_price_smape" : price_smape,            
-                "val_price_ACC" : price_acc,
-                "val_OB_smape" : OB_smape,                        
-                "val_OB_ACC" : OB_acc,
-                "training_time" : stop - start,            
-            }, index = [n * j + i])
-            results = pandas.concat([results, res], ignore_index=True)
+                res = pandas.DataFrame({
+                    "country" : country,
+                    "ID" : ID,
+                    "OBs" : OBs,
+                    "seed" : seed,
+                    "val_price_mae" : price_mae,
+                    "val_price_smape" : price_smape,            
+                    "val_price_ACC" : price_acc,
+                    "val_OB_smape" : OB_smape,                        
+                    "val_OB_ACC" : OB_acc,
+                    "training_time" : stop - start,            
+                }, index = [n * j + i])
+                results = pandas.concat([results, res], ignore_index=True)
 
 results.to_csv()
