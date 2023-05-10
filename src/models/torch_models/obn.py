@@ -1,4 +1,4 @@
-import torch, torch.nn as nn, pytorch_lightning as pl, os, numpy as np
+import torch, torch.nn as nn, pytorch_lightning as pl, os, numpy as np, random
 from pytorch_lightning.loggers import TensorBoardLogger
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from torch.utils.data import Dataset, DataLoader
@@ -237,7 +237,7 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
 
         def seed_worker(worker_id):
             worker_seed = torch.initial_seed() % 2**32
-            numpy.random.seed(worker_seed)
+            np.random.seed(worker_seed)
             random.seed(worker_seed)
             
         g = torch.Generator()
