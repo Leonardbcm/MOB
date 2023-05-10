@@ -169,6 +169,9 @@ def compute_DM_tests_OBs(countries,datasets,IDs,OB_sizes,predicted_prices,
         
     return prices_pvalues, OB_pvalues
 
+def merge_OB_tables(countries, datasets, IDs, OB_sizes, results):
+    
+
 def compute_DM_tests_2_OBs(countries,datasets,IDs, OBs1, OBs2, predicted_prices,
                            real_prices, predicted_OB, real_OB):
     price_tables = {}
