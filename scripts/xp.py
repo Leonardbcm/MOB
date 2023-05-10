@@ -32,9 +32,9 @@ PARAMS = CHECK_PARAMS
 ####### configurations
 #countries = ["FR", "DE", "BE", "NL"]
 #datasets = ["Lyon", "Munich", "Bruges", "Lahaye"]
-countries = ["FR"]
-datasets = ["Lyon"]
-IDs = [8]
+countries = ["BE"]
+datasets = ["Bruges"]
+IDs = [7]
 OBs = 20
 ####### Results container
 results = pandas.DataFrame(
@@ -44,7 +44,7 @@ results = pandas.DataFrame(
         "val_OB_ACC",    
         "training_time"])
 ######## For storing results
-n = 7
+n = len(IDs)
 for i, ID in enumerate(IDs):
     for j, (country, dataset) in enumerate(zip(countries, datasets)):
         ps.set_all_seeds(0)        

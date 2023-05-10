@@ -233,7 +233,15 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         self.transformer.fit(y)
         y = self.transformer.transform(y)        
         
-        ((X, y), (Xv, yv)) = self.spliter(X, y)        
+        ((X, y), (Xv, yv)) = self.spliter(X, y)
+
+        def seed_worker(worker_id):
+            worker_seed = torch.initial_seed() % 2**32
+            numpy.random.seed(worker_seed)
+            random.seed(worker_seed)
+            
+        g = torch.Generator()
+        g.manual_seed(0)
                 
         NUM_WORKERS = self.n_cpus_
         train_dataset = EPFDataset(X, y, dtype=self.dtype)
@@ -241,11 +249,15 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         train_loader = DataLoader(
             train_dataset,
             batch_size=self.batch_size, shuffle=self.shuffle_train,
-            num_workers=NUM_WORKERS)
+            num_workers=NUM_WORKERS,
+            worker_init_fn=seed_worker,
+            generator=g)
         val_loader = DataLoader(
             val_dataset,
             batch_size=self.batch_size, shuffle=False,
-            num_workers=NUM_WORKERS)
+            num_workers=NUM_WORKERS,
+            worker_init_fn=seed_worker,
+            generator=g)
 
         return train_loader, val_loader 
 

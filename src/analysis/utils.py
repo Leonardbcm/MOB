@@ -83,7 +83,6 @@ def df_to_latex(df, index=True, index_col="", hlines=True, roundings=[],
         """
 
     rows = list(df.index)
-    print(rows)
     nr = len(rows)
     for row in rows:
         # Add the index in first column
