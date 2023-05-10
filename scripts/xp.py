@@ -32,10 +32,10 @@ PARAMS = CHECK_PARAMS
 ####### configurations
 #countries = ["FR", "DE", "BE", "NL"]
 #datasets = ["Lyon", "Munich", "Bruges", "Lahaye"]
-countries = ["BE"]
-datasets = ["Bruges"]
-IDs = [7]
-OBs = 50
+countries = ["FR"]
+datasets = ["Lyon"]
+IDs = [8]
+OBs = 20
 ####### Results container
 results = pandas.DataFrame(
     columns=[
@@ -47,6 +47,7 @@ results = pandas.DataFrame(
 n = 7
 for i, ID in enumerate(IDs):
     for j, (country, dataset) in enumerate(zip(countries, datasets)):
+        ps.set_all_seeds(0)        
         spliter = MySpliter(PARAMS["N_VAL"], shuffle=False)        
         model_wrapper = OBNWrapper(
             "XP", dataset, spliter=spliter, country=country, skip_connection=True,

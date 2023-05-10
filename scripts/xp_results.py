@@ -20,89 +20,25 @@ N_SAMPLES = 1444
 N_VAL = 365
 BATCH = 80
 
-####### Results container
-results = pandas.DataFrame(
-    columns=[
-        "country", "ID",
-        "val_price_mae", "val_price_smape", "val_price_ACC", "val_OB_smape",
-        "val_OB_ACC"])
 ####### configurations
-countries = ["FR", "DE", "BE", "NL"]
-datasets = ["Lyon", "Munich", "Bruges", "Lahaye"]
+#countries = ["FR", "DE", "BE", "NL"]
+countries = ["FR"]
+#datasets = ["Lyon", "Munich", "Bruges", "Lahaye"]
+datasets = ["Lyon"]
 IDs = [1, 2, 3, 4, 5, 6, 7]
 
-######## For retrieving results
-nc = len(countries)
-nh = 24
-n = 7
-OBs = 20
+######## For retrieving results, OBs = 20
+predicted_prices_20, real_prices_20, predicted_OB_20, real_OB_20, results_20 = retrieve_results(IDs, countries, datasets, 20, N_VAL, N_SAMPLES, nh = 24)
 
-real_prices = np.zeros((nc, n, N_VAL, nh))
-real_OB =  np.zeros((nc, n, N_VAL, 72*OBs))
+######## For retrieving results, OBs = 50
+predicted_prices_50, real_prices_50, predicted_OB_50, real_OB_50, results_50 = retrieve_results(IDs, countries, datasets, 50, N_VAL, N_SAMPLES, nh = 24)
 
-predicted_prices = np.zeros((nc, n, N_VAL, nh))
-predicted_OB = np.zeros((nc, n, N_VAL, 72*OBs))
-
-for j, (country, dataset) in enumerate(zip(countries, datasets)):
-    for i, ID in enumerate(IDs):
-
-        ###### Create Model wrapper
-        spliter = MySpliter(N_VAL, shuffle=False)        
-        model_wrapper = OBNWrapper(
-            "RESULTS", dataset, spliter=spliter, country=country,
-            skip_connection=True, use_order_books=False, order_book_size=OBs,
-            IDn=ID, tboard="RESULTS")
-        version = model_wrapper.highest_version
-        stopped_epoch = model_wrapper.get_stopped_epoch(version)
-
-        ###### Load DATA        
-        X, Y = model_wrapper.load_train_dataset()
-        X = X[:N_SAMPLES, :]
-        Y = Y[:N_SAMPLES, :]
-        (_, _), (Xv, Yv) = model_wrapper.spliter(X, Y)
-
-        ###### Compute metrics
-        yvpred = model_wrapper.get_predictions(version).values
-        if not model_wrapper.predict_order_books:
-            price_mae = model_wrapper.price_mae(Yv, yvpred)
-            price_smape = model_wrapper.price_smape(Yv, yvpred)        
-            price_acc = model_wrapper.price_ACC(Yv, yvpred)
-        else:
-            price_mae = np.nan
-            price_smape = np.nan
-            price_acc = np.nan
-    
-        if model_wrapper.gamma > 0:
-            OB_smape = model_wrapper.OB_smape(Yv, yvpred)        
-            OB_acc = model_wrapper.OB_ACC(Yv, yvpred)
-        else:
-            OB_smape = np.nan
-            OB_acc = np.nan
-
-        ###### Store results            
-        res = pandas.DataFrame({
-            "country" : country,
-            "ID" : ID,                        
-            "val_price_mae" : price_mae,
-            "val_price_smape" : price_smape,            
-            "val_price_ACC" : price_acc,
-            "val_OB_smape" : OB_smape,                        
-            "val_OB_ACC" : OB_acc,
-        }, index = [n * j + i])
-        results = pandas.concat([results, res], ignore_index=True)
-
-        ###### Store predictions and labels
-        if not model_wrapper.predict_order_books:
-            predicted_prices[j, i] = yvpred[:, model_wrapper.y_indices]
-            real_prices[j, i] = Yv[:, model_wrapper.y_indices]
-            
-        if model_wrapper.gamma > 0:
-            predicted_OB[j, i] = yvpred[:, model_wrapper.yOB_indices]
-            real_OB[j, i] = Yv[:, model_wrapper.yOB_indices]            
-            
-
-results = results.sort_values(["country", "ID"]).loc[:, ["country", "ID", "val_OB_smape", "val_OB_ACC", "val_price_mae", "val_price_smape", "val_price_ACC"]]
-print(df_to_latex(results.set_index(["country", "ID"]), roundings=[2, 2, 3, 2, 2, 3], hlines=False))
+key_order = ["country", "ID", "val_OB_smape", "val_OB_ACC", "val_price_mae",
+             "val_price_smape", "val_price_ACC"]
+results = results.sort_values(["country", "ID"]).loc[:, key_order]
+print(df_to_latex(
+    results.set_index(["country", "ID"]),
+    roundings=[2, 2, 3, 2, 2, 3], hlines=False))
 
 ####### Compute DM tests
 prices_pvalues = np.ones((nc, n, n)) * np.nan
