@@ -85,18 +85,30 @@ class TorchWrapper(ModelWrapper):
     def highest_version(self):
         """
         Get the highest version = version with the biggest number of epochs
+        If several versions have the same number of epochs, then picks the highest
+        version number
         """
         path = self.logs_path
         epochs = []
         versions = os.listdir(path)
+        n_versions = len(versions)
+        print(f"Fond {n_versions} different versions for {self.ID} : ")        
         for version in versions:
             try:
                 cur_epoch = self.get_stopped_epoch(version)
             except:
                 cur_epoch = 0
             epochs += [cur_epoch]
-        ind = np.argmax(np.array(epochs))
-        return versions[ind]
+            print(f"\t{version} : {cur_epoch} epochs.")
+
+        epochs = np.array(epochs)
+        inds = np.where(epochs == np.max(epochs))[0]        
+        IDs = np.array([int(v.split("_")[1]) for v in np.array(versions)[inds]])
+        ind_max_version = np.argmax(IDs)
+                
+        chosen = np.array(versions)[inds][ind_max_version]
+        print(f"\t\tPicked version {chosen} for {self.ID}")
+        return chosen
 
     def get_stopped_epoch(self, version):
         filename = self.checkpoint_file(self.checkpoint_path(version))

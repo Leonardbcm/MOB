@@ -14,30 +14,43 @@ XP results and analysis file
 """
 
 ####### MAIN PARAMS
-N_EPOCHS = 1000
 N_SAMPLES = 1444
 N_VAL = 365
-BATCH = 80
 
 ####### configurations
+folder = "RESULTS"
 #countries = ["FR", "DE", "BE", "NL"]
 countries = ["BE"]
 #datasets = ["Lyon", "Munich", "Bruges", "Lahaye"]
 datasets = ["Bruges"]
-IDs = np.array([7])
-OB_sizes = np.array([20, 50, 100])
+IDs = np.array([1, 2, 3, 4, 5, 6, 7])
+OB_sizes = np.array([20])
+seeds = [0]
 
 ###### Retrieve several OBs
 predicted_prices, real_prices, predicted_OB, real_OB, results=retrieve_results_OBs(
-    IDs, countries, datasets, OB_sizes, N_VAL, N_SAMPLES, nh = 24)
-key_order = ["country", "ID", "val_OB_smape", "val_OB_ACC", "val_price_mae",
+    IDs, countries, datasets, OB_sizes, N_VAL, N_SAMPLES, folder,nh = 24)
+col_order = ["country","ID","version","val_OB_smape", "val_OB_ACC", "val_price_mae",
              "val_price_smape", "val_price_ACC"]
-
+#col_order = ["seed", "val_OB_smape", "val_OB_ACC", "val_price_mae",
+#            "val_price_smape", "val_price_ACC"]             
+id_order = ["country", "ID"]
+#id_order = ["seed"]
 res = results["20"]
-res = res.sort_values(["country", "ID"]).loc[:, key_order]
+#res = results
+
+res = res.sort_values(id_order).loc[:, col_order]
 print(df_to_latex(
-    res.set_index(["country", "ID"]),
-    roundings=[2, 2, 3, 2, 2, 3], hlines=False))
+    res.set_index(id_order), roundings=[2, 2, 3, 2, 2, 3], hlines=False))
+
+plot_betas(res, np.array([1, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16]), "FR", "Lyon",
+           ax_=None, col="val_price_smape")
+plot_betas(res, np.array([3, 7, 17, 18, 19, 20, 21, 22]), "FR", "Lyon",
+           ax_=None, col="val_price_smape")
+
+plot_all_betas(res, np.array([1, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16]),
+               np.array([3, 7, 17, 18, 19, 20, 21, 22]), "FR", "Lyon")
+plot_all_betas_1(res, IDs, "FR", "Lyon", fontsize=20)
 
 ####### Compute DM tests between ID of the same OBs and same country
 prices_pvalues, OB_pvalues = compute_DM_tests_OBs(
