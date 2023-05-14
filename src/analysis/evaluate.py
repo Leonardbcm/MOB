@@ -47,6 +47,7 @@ def mape(ytrue, ypred): return 100 * mean_absolute_percentage_error(ytrue, ypred
 def rmse(ytrue, ypred): return math.sqrt(mean_squared_error(ytrue, ypred))
 def rmae(ytrue, ypred, ynaive): return mean_absolute_error(ytrue, ypred) / mean_absolute_error(ytrue, ynaive)
 def rACC(ytrue, ypred, ynaive): return ACC(ytrue, ynaive) / ACC(ytrue, ypred)
+def rsmape(ytrue, ypred, ynaive): return smape(ytrue, ynaive) / sampe(ytrue, ypred)
 
 def dae(ytrue, ypred):
     try:

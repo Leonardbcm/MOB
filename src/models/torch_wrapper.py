@@ -3,7 +3,7 @@ from sklearn.pipeline import make_pipeline
 from sklearn.compose import TransformedTargetRegressor
 from torch.profiler import profile, record_function, ProfilerActivity
 import torch.autograd.profiler as profiler
-import matplotlib.pyplot as plt, time
+import matplotlib.pyplot as plt, time, shap
 
 from src.models.spliter import MySpliter
 import src.models.model_utils as mu
@@ -43,6 +43,9 @@ class TorchWrapper(ModelWrapper):
         return os.path.join(self.logs_path, self.latest_version,
                      "validation_predictions.csv")
 
+    def test_recalibrated_shape_path(self, version):
+        return  os.path.join(self.logs_path, version, "shap_values.npy")    
+    
     def test_prediction_path(self):
         return os.path.join(self.logs_path, self.latest_version,
                             "test_predictions.csv")         
@@ -122,29 +125,35 @@ class TorchWrapper(ModelWrapper):
         filename = self.checkpoint_file(path)
         return os.path.join(path, filename)
 
-    def load_refit(self, regr, X, Y, version):
+    def load(self, X, Y):
         """
-        Reload the model's state from a checkpoint and use it for training
+        Reload the model's state from a checkpoint
+        Use as checkpoint the highest_version
         """
-        train_loader, val_loader = regr.steps[1][1].create_trainer(X, Y)
+        PARAMS = {"BATCH" : 80}
+        default_params = self.params()        
+        default_params["early_stopping"] = None
+        default_params["n_epochs"] = 1
+        default_params["batch_size"] = PARAMS["BATCH"]
+        default_params["OB_plot"] = False
+        default_params["profile"] = False
+        regr = self.make(default_params)
+        regr.fit(X, Y)
         
+        tl = regr.steps[1][1].prepare_for_test(X[:10])
         trainer = regr.steps[1][1].trainer
-        model = regr.steps[1][1].model        
-        trainer.fit(model, ckpt_path=self.latest_checkpoint(version),
-                    train_dataloaders=train_loader, val_dataloaders=val_loader)
+        model = regr.steps[1][1].model
 
-    def load_predict(self, regr, X, version):
-        """
-        Reload the model's state from a checkpoint and use it for prediction
-        """
-        test_loader = regr.steps[1][1].create_trainer(X)
-        
-        trainer = regr.steps[1][1].trainer
-        model = regr.steps[1][1].model        
-        predictions = trainer.predict(
-            model, test_loader,ckpt_path=self.latest_checkpoint(version))
+        version = self.highest_version
+        trainer.predict(
+            model, tl,ckpt_path=self.latest_checkpoint(version))
+        return regr, version
 
-        return predictions
+    def prepare_explainer(self, regr, Xtr):
+        def wrapper(x): return self.predict_test(regr, x)
+        data = Xtr.mean(axis=0).reshape(1, -1)
+        explainer = shap.KernelExplainer(model=wrapper, data=data)
+        return explainer
         
     def get_real_prices(self, dataset="validation"):
         """
@@ -226,6 +235,9 @@ class TorchWrapper(ModelWrapper):
         return line
 
     def load_coeffs(self):
+        """
+        Load correlation coefficients for computing the OB loss
+        """
         coeffs = np.load(os.path.join(os.environ["MOB"], "coeffs.npy"))
 
         countries = np.array(["FR", "DE", "BE", "NL"])
@@ -237,6 +249,139 @@ class TorchWrapper(ModelWrapper):
 
         self.coefs = coeffs[x, y]
 
+    @property
+    def variables(self):
+        """
+        Return the list of all variablers names
+        """
+        return [
+            "Past Prices", "Consumption Forecasts", "Generation Forecasts",
+            "Renewables Generation Forecasts",
+            "Foreign Past Prices", "Foreign Consumption Forecasts",
+            "Foreign Generation Forecasts",
+            "Foreign Renewables Generation Forecasts",
+            "Swiss Prices", "UK Prices", "Date", "Gas Price"]
+
+    def map_variable(self, v):
+        """
+        Map the variable name to a more compact sting
+        """
+        if v in ("Past Prices", "Foreign Past Prices"):
+            return "price"
+        if v in ("Consumption Forecasts", "Foreign Consumption Forecasts"):
+            return "consumption"
+        if v in ("Generation Forecasts", "Foreign Generation Forecasts"):
+            return "gen"
+        if v in ("Renewables Generation Forecasts",
+                 "Foreign Renewables Generation Forecasts"):
+            return "ren gen"
+        if v in ("Swiss Prices"):
+            return "CH price"
+        if v in ("UK Prices"):
+            return "UK price"
+        if v in ("Date"):
+            return "date"
+        if v in ("Gas Price"):
+            return "gas"
+        return ""
+
+    @property
+    def country_list(self):
+        """
+        Return the list of all countries
+        """
+        return np.array(["FR", "DE", "BE", "NL", "AT", "ITNORD", "ES", "CH", "GB"])
+
+    def foreign_country_list(self, variable=""):
+        """
+        Return the list of all foreign countries
+        """
+        filters = [self.country]
+        if "Prices" in variable:
+            filters += ["CH", "GB"]
+            
+        return np.array([c for c in self.country_list if c not in filters])
+
+    def get_vname(self, variable):
+        """
+        Given a variable group name, return the prefix column
+        """
+        if "Renewables Generation Forecasts" in variable:
+            return "renewables_production"
+        if "Generation Forecasts" in variable:
+            return "production"
+        if "Consumption Forecasts" in variable:
+            return "consumption"
+        if "Prices" in variable:
+            return "price"
+        if "Gas Price" in variable:
+            return "FR_ShiftedGazPrice"
+        if "Date" in variable:
+            return ["day", "month", "week", "day_of_week"]
+        return ""
+
+    def get_variable_indices(self, variable):
+        """
+        Given a variable name, return all indices of this varialbe in X
+        """
+        model_columns = np.array(self.columns)
+        variable_columns = np.array(self.get_variable_columns(variable))
+        indices = np.array(
+            [np.where(model_columns == col)[0][0] for col in variable_columns])
+        return indices
+        
+    def get_variable_columns(self, variable):
+        """
+        Given a variable name, return all columns of this variable
+        """
+        columns = []
+        
+        # indicates if the variable name is suffixed by _past_1
+        past_ = variable in ("Past Prices","Foreign Past Prices")
+        vname = self.get_vname(variable)
+        
+        # Local Variables : only 1 country which is self.country
+        if variable in ["Past Prices", "Consumption Forecasts",
+                        "Generation Forecasts","Renewables Generation Forecasts"]:
+            columns = self.get_variable_columns_(vname, self.country, past=past_)
+            
+        # Foreign variables : need to concatenate arrays
+        if variable in ["Foreign Past Prices", "Foreign Consumption Forecasts",
+                        "Foreign Generation Forecasts",
+                        "Foreign Renewables Generation Forecasts"]:
+            columns = []
+            for country in self.foreign_country_list(variable=variable):
+                columns += self.get_variable_columns_(vname, country, past=past_)
+
+        # Only 1 country which is hard_coded
+        if variable in ["Swiss Prices", "UK Prices"]:
+            if variable in ["Swiss Prices"]:
+                country = "CH"
+            if variable in ["UK Prices"]:
+                country = "GB"
+            columns = self.get_variable_columns_(vname, country, past=False)
+
+        # Only 1 column for the gaz price : take vname
+        if variable in ["Gas Price"]:
+            columns = [vname]
+
+        # Arrange date columns
+        if variable in ["Date"]:
+            columns = []
+            for v in vname:
+                columns += [f"{self.country}_{v}_1", f"{self.country}_{v}_2"]
+
+        if columns == []:
+            raise Exception(f"Empty column list for {variable}, {vname}")
+        return columns        
+        
+    def get_variable_columns_(self, vname, country, past=False):
+        past_ = ""
+        if past:
+            past_ = "_past_1"
+            
+        return [f"{country}_{vname}_{h}{past_}" for h in range(24)]
+        
         
 class OBNWrapper(TorchWrapper):
     """

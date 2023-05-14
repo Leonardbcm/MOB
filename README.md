@@ -18,6 +18,10 @@ Set up the `MOB` environment variable for reading/storing data:
 
 > os.environ["MOB"] = path/to/folder
 
+Install shap from 
+
+> python -m pip install git+https://github.com/dsgibbons/shap.git
+
 ## Data
 
 Data is available [here](https://www.dropbox.com/sh/z5m1udr3i7cl8sx/AAA2H5ErEqWl83nTIQ9Fzsdxa?dl=0).

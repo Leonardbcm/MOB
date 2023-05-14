@@ -208,8 +208,8 @@ class ModelWrapper(object):
         bp = self.test_recalibrated_prediction_path()
         return bp[:-4] + f"_{str(i)}.npy"
 
-    def tr_shap_path(self, i):
-        bp = self.test_recalibrated_shape_path()
+    def tr_shap_path(self, version, i):
+        bp = self.test_recalibrated_shape_path(version)
         return bp[:-4] + f"_{str(i)}.npy"
     
     def test_recalibrated_prediction_path(self, filters=None,inverted_filters=None):
@@ -305,7 +305,15 @@ class ModelWrapper(object):
     
     def OB_mae(self, y, yhat):
         return mae(y[:, self.yOB_indices], yhat[:, self.yOB_indices])
-
+    
+    def OB_rsmape(self, y, yhat):
+        return rmae(y[1:, self.yOB_indices], yhat[1:, self.yOB_indices],
+                    y[:-1, self.yOB_indices])    
+    
+    def OB_rACC(self, y, yhat):
+        return rmae(y[1:, self.yOB_indices], yhat[1:, self.yOB_indices],
+                    y[:-1, self.yOB_indices])    
+    
     def OB_ACC(self, y, yhat):
         return ACC(y[:, self.yOB_indices], yhat[:, self.yOB_indices])    
 
@@ -317,6 +325,10 @@ class ModelWrapper(object):
     
     def price_mae(self, y, yhat):
         return mae(y[:, self.y_indices], yhat[:, self.y_indices])
+
+    def price_rmae(self, y, yhat):
+        return rmae(y[1:, self.y_indices], yhat[1:, self.y_indices],
+                    y[:-1, self.y_indices])    
 
     def price_ACC(self, y, yhat):
         return ACC(y[:, self.y_indices], yhat[:, self.y_indices])

@@ -77,6 +77,8 @@ def retrieve_results(IDs, countries, datasets, OBs, N_VAL,N_SAMPLES,folder,nh = 
             yvpred = model_wrapper.get_predictions(version_).values
             if not model_wrapper.predict_order_books:
                 price_mae = model_wrapper.price_mae(Yv, yvpred)
+                price_dae = model_wrapper.price_dae(Yv, yvpred)
+                price_rmae = model_wrapper.price_rmae(Yv, yvpred)
                 price_smape = model_wrapper.price_smape(Yv, yvpred)        
                 price_acc = model_wrapper.price_ACC(Yv, yvpred)
             else:
@@ -85,11 +87,15 @@ def retrieve_results(IDs, countries, datasets, OBs, N_VAL,N_SAMPLES,folder,nh = 
                 price_acc = np.nan
                 
             if model_wrapper.gamma > 0:
-                OB_smape = model_wrapper.OB_smape(Yv, yvpred)        
-                OB_acc = model_wrapper.OB_ACC(Yv, yvpred)
+                OB_smape = model_wrapper.OB_smape(Yv, yvpred)
+                OB_rsmape = model_wrapper.OB_rsmape(Yv, yvpred)        
+                OB_acc = model_wrapper.OB_ACC(Yv, yvpred)                
+                OB_racc = model_wrapper.OB_rACC(Yv, yvpred)
             else:
                 OB_smape = np.nan
+                OB_rsmape = np.nan
                 OB_acc = np.nan
+                OB_racc = np.nan
                 
             ###### Store results            
             res = pandas.DataFrame({
@@ -98,8 +104,12 @@ def retrieve_results(IDs, countries, datasets, OBs, N_VAL,N_SAMPLES,folder,nh = 
                 "OBs" : OBs,
                 "version" : version,
                 "val_price_mae" : price_mae,
+                "val_price_dae" : price_dae,
+                "val_price_rmae" : price_rmae,                
                 "val_price_smape" : price_smape,            
                 "val_price_ACC" : price_acc,
+                "val_OB_rsmape" : OB_rsmape,                        
+                "val_OB_rACC" : OB_racc,
                 "val_OB_smape" : OB_smape,                        
                 "val_OB_ACC" : OB_acc,
             }, index = [j*n + i])
@@ -115,6 +125,69 @@ def retrieve_results(IDs, countries, datasets, OBs, N_VAL,N_SAMPLES,folder,nh = 
                 real_OB[j, i] = Yv[:, model_wrapper.yOB_indices]
 
     return predicted_prices, real_prices, predicted_OB, real_OB, results
+
+def normalize_shap(data):
+    # Total contribution for each predicted label = 100%
+    data = np.abs(data)
+    per_label = data.sum(axis=2)    
+    for i in range(data.shape[0]):
+        for j in range(data.shape[1]):
+            data[i, j, :] /= per_label[i, j]
+            
+    data *= 100            
+    return data
+
+def retrieve_shap_values(IDs, country, dataset, OBs, N_VAL, N_SAMPLES,
+                         N_GROUPS, folder,nh = 24, version=None):
+    """
+    Given a list of IDs, a fixed country, dataset and OBs, retrieve
+    and process the shap values.
+    """
+    n = len(IDs)
+    matrix = np.zeros((n , N_GROUPS))
+    for i, ID in enumerate(IDs):
+
+        ###### Create Model wrapper
+        spliter = MySpliter(N_VAL, shuffle=False)        
+        model_wrapper = OBNWrapper(
+            "RESULTS", dataset, spliter=spliter, country=country,
+            skip_connection=True, use_order_books=False,
+            order_book_size=OBs, IDn=ID, tboard=folder)
+        if version is None:
+            version_ = model_wrapper.highest_version
+        else:
+            version_ = f"version_{version}"
+
+        # Load raw shaps    
+        shaps = np.load(model_wrapper.test_recalibrated_shape_path(version_))
+        
+        # Keep only contributions towards the prices
+        shaps = shaps[model_wrapper.y_indices, :, :]
+
+        # Keep only contributions from DATA (remove OB)
+        shaps = shaps[:, :, model_wrapper.x_indices]
+
+        # Normalize shaps : sum of shaps must be 100 for all labels/samples
+        shaps = normalize_shap(shaps)
+        
+        # Average across all labels
+        shaps = shaps.mean(axis=0)        
+        
+        # Group by variables
+        N_GROUPS = len(model_wrapper.variables)
+        grouped_shaps = np.zeros((N_SAMPLES, N_GROUPS))
+        for j, variable in enumerate(model_wrapper.variables):
+            inds_variable = model_wrapper.get_variable_indices(variable)
+            grouped_shaps[:, j] = shaps[:, inds_variable].sum(axis=1)
+            
+        # Average across all samples
+        grouped_shaps = grouped_shaps.mean(axis=0)
+        
+        # Store in the Matrix
+        matrix[i, :] = grouped_shaps
+        
+    return matrix
+
 
 def compute_dm_tests(countries, datasets, IDs, OBs,
                      predicted_prices, real_prices, predicted_OB, real_OB):
@@ -258,7 +331,8 @@ def plot_DM_tests(pvalues, countries=[], IDs=[], label="",
     plt.suptitle(f"PValues of the {label}")    
     
 
-def plot_betas(res, IDs, country, dataset, ax_=None, col="val_price_smape"):
+def plot_betas(res, IDs, country, dataset, ax_=None, col="val_price_smape", f=1,
+               saw_tooth=[]):
     if ax_ is None:
         fig, ax = plt.subplots(figsize=(19.2, 10.8))
     else:
@@ -272,7 +346,19 @@ def plot_betas(res, IDs, country, dataset, ax_=None, col="val_price_smape"):
 
     print(betas)
     inds = np.argsort(betas)
-    ax.plot(np.array(betas)[inds], temp.loc[IDs, col].values[inds])
+    betas_plot = np.array(betas)[inds]
+    error_plot = temp.loc[IDs, col].values[inds]
+    
+    not_keep_inds = [i for i, b in enumerate(betas_plot) if b in saw_tooth]
+    keep_inds = [i for i, b in enumerate(betas_plot) if b not in saw_tooth]    
+
+    betas_flat = betas_plot.copy()
+    error_flat = error_plot.copy()
+    
+    for i in not_keep_inds:
+        error_flat[i] = error_flat[keep_inds][i-f:i+f].mean()
+    
+    ax.plot(betas_flat, error_flat)
     ax.grid("on")
 
     # X AXIS
@@ -289,14 +375,17 @@ def plot_betas(res, IDs, country, dataset, ax_=None, col="val_price_smape"):
     if ax_ is None:
         plt.show()
 
-def plot_all_betas_1(res, IDs, country, dataset, fontsize=20):
-    fig, axes = plt.subplots(3, 1, figsize=(19.2, 10.8), sharex="col", sharey="row")
-    cols = ["val_price_mae", "val_price_smape", "val_price_ACC"]
+def plot_all_betas_1(res, IDs, country, dataset, fontsize=20, f=1, saw_tooth=[]):
+    fig, axes = plt.subplots(3, 2, figsize=(19.2, 10.8), sharex="col")
+    axes = axes.flatten()
+    cols = ["val_price_mae", "val_price_dae", "val_price_smape",
+            "val_price_rmae", "val_price_ACC"]
 
     axes[0].text(0.5, 1.1, "$\\alpha = 1 - \\beta$, $\\gamma = 0$",
                    transform=axes[0].transAxes, ha="center", fontsize=fontsize)
-    for i, ax in enumerate(axes):
-        plot_betas(res, IDs, "FR", "Lyon", ax_=ax, col=cols[i])
+    for i, col in enumerate(cols):
+        plot_betas(res, IDs, country, dataset, ax_=axes[i], col=col, f=f,
+                   saw_tooth=saw_tooth)
     plt.show()          
     
 def plot_all_betas(res, IDs1, IDs2, country, dataset, fontsize=20):
@@ -308,7 +397,74 @@ def plot_all_betas(res, IDs1, IDs2, country, dataset, fontsize=20):
     axes[0,1].text(0.5, 1.1, "$\\alpha = \\gamma = \\frac{1 - \\beta}{2}$",
                    transform=axes[0,1].transAxes, ha="center", fontsize=fontsize)
     for i, ax in enumerate(axes[:, 0]):
-        plot_betas(res,IDs1, "FR", "Lyon", ax_=ax, col=cols[i])
+        plot_betas(res,IDs1, country, dataset, ax_=ax, col=cols[i])
     for i, ax in enumerate(axes[:, 1]):
-            plot_betas(res, IDs2, "FR", "Lyon", ax_=ax, col=cols[i])
+            plot_betas(res, IDs2, country, dataset, ax_=ax, col=cols[i])
     plt.show()    
+
+def plot_shap_values_beta(matrix, IDs, N_VAL, country, dataset, OBs, folder,
+                          params):
+    """
+    Plot the contributions of listed models IDs against the beta parameter
+    """
+    #### Retrieve betas
+    betas = []    
+    for i, ID in enumerate(IDs):
+
+        ###### Create Model wrapper
+        spliter = MySpliter(N_VAL, shuffle=False)        
+        model_wrapper = OBNWrapper(
+            "RESULTS", dataset, spliter=spliter, country=country,
+            skip_connection=True, use_order_books=False,
+            order_book_size=OBs, IDn=ID, tboard=folder)
+        betas.append(model_wrapper.beta)
+
+    betas = np.array(betas)
+    
+    #### Sort by betas
+    indsort = np.argsort(betas)
+    betas = betas[indsort]
+    sorted_values = matrix[indsort, :]
+
+    #### Compute difference with baseline
+    baseline = sorted_values[0, :]
+    matrix = (sorted_values - baseline)[1:]
+
+    #### Display the matrix
+    fig, ax = plt.subplots(1, figsize=(19.2, 10.8))
+    vabs = np.abs(matrix).max()
+    im = ax.imshow(matrix, cmap="RdYlGn", vmin=-vabs, vmax=vabs)
+    
+    #### Arrange the plot
+    ## Y Axis
+    ax.set_ylabel("$\\beta$", fontsize=params["fontsize"])
+
+    yticks_positions = np.array([i for i in range(len(betas[1:]))])
+    ax.set_yticks(yticks_positions)
+    ax.set_yticklabels(betas[1:], fontsize=params["fontsize_labels"])
+
+    plt.annotate("", xy=[-0.001, 0], xycoords="axes fraction",
+                 xytext = [-0.001, 1.2], textcoords="axes fraction",
+                 arrowprops={"arrowstyle": "<-", "linewidth" :5, "color" : "k"})    
+
+    ## X Axis
+    ax.set_xlabel("Variables", fontsize=params["fontsize"])    
+    xticks_labels = [model_wrapper.map_variable(mwv)
+                     for mwv in model_wrapper.variables]
+    
+    xticks_positions = np.array([i for i in range(len(xticks_labels))])
+    ax.set_xticks(xticks_positions)
+    ax.set_xticklabels(xticks_labels,rotation=45,fontsize=params["fontsize_labels"])
+
+    ## The colorbar
+    cbar = plt.colorbar(im, ax=ax, location="top", shrink=0.5, pad=0.01)
+    cbar.ax.tick_params(labelsize=params["fontsize_labels"], pad=-30)
+
+    ## Title
+    plt.suptitle(
+        "Difference of contribution between $\\beta = 0$ and $\\beta > 0$ (\%)",
+        fontsize=params["fontsize"], y=0.87)    
+    
+
+    
+    

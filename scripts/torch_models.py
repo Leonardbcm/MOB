@@ -17,7 +17,7 @@ import src.models.parallel_scikit as ps
 
 ############## Construct model wrapper and load data
 spliter = MySpliter(365, shuffle=False)
-model_wrapper = OBNWrapper("TEST", "Lyon", country="FR", tboard="RESULTS",
+model_wrapper = OBNWrapper("TEST", "Bruges", country="BE", tboard="RESULTS",
                            spliter=spliter, skip_connection=True,
                            use_order_books=False,
                            order_book_size=20,
@@ -29,7 +29,7 @@ print(Y.shape)
 ############## Set some params
 ptemp = model_wrapper.params()
 ptemp["early_stopping"] = None
-ptemp["n_epochs"] = 2
+ptemp["n_epochs"] = 1
 ptemp["OB_plot"] = os.path.join(model_wrapper.logs_path)
 ptemp["profile"] = True
 
@@ -49,6 +49,7 @@ model_wrapper.price_ACC(Yv, yhat)
 model_wrapper.OB_ACC(Yv, yhat)
 model_wrapper.OB_smape(Yv, yhat)
 
+###############
 # Test set
 Xt, Yt = model_wrapper.load_test_dataset()
 ythat = model_wrapper.predict_test(regr, Xt)
