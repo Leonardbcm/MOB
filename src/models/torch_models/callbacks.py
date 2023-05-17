@@ -4,7 +4,6 @@ from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.callbacks import Callback
 import numpy as np, matplotlib, matplotlib.pyplot as plt, torch, os
 from src.euphemia.ploters import get_ploter
-
 from src.euphemia.order_books import TorchOrderBook
 
 class PlotOBCallback(Callback):

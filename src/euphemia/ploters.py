@@ -401,7 +401,7 @@ class SimplePloter(Ploter):
     
     def display(self, ax_=None, schema=False, colors=None, labels=None,
                 linewidth=2, label_fontsize=20, fontsize=30, alpha=0.5, step=0.01,
-                fit_to_data=True, **kwargs):
+                fit_to_data=True, title=None, axlabel=True,**kwargs):
         if ax_ is None:
             fig, ax = plt.subplots(1)
         else:
@@ -451,10 +451,13 @@ class SimplePloter(Ploter):
             ax.legend(fontsize=fontsize)
             ax.set_ylim([pmin, pmax])
             ax.set_xlim([minv - xpad, maxv + xpad])            
-            
-        ax.set_xlabel("Cumulated volume (MWh)", fontsize=fontsize)
-        ax.set_ylabel("Price (EUR/MWh)", fontsize=fontsize)        
-        ax.set_title("Aggregated Curves", fontsize=fontsize)    
+
+        if axlabel:
+            ax.set_xlabel("Cumulated volume (MWh)", fontsize=fontsize)
+            ax.set_ylabel("Price (EUR/MWh)", fontsize=fontsize)
+        if title is not None:
+            title  = "Aggregated Curves"
+        ax.set_title(title, fontsize=fontsize)    
         ax.grid("on")        
 
         if ax_ is None:

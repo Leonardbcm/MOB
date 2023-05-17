@@ -237,7 +237,6 @@ class MinDual(ComputationalSolution):
             return return_dict
 
         return res, methods
-
         
 class OnlyPartial(ComputationalSolution):
     """

@@ -198,7 +198,7 @@ class LoadedOrderBook(SimpleOrderBook):
                 [supply_volumes, demand_volumes],
                 [supply_prices, demand_prices],
                 ["Supply", "Demand"],
-                [supply_orders, demand_orders]
+                [supply_orders, demand_orders],
                 [range(len(supply_volumes)-1),range(len(demand_volumes)-1, 0, -1)],
                 [lambda x, y: x + y, lambda x, y: x - y]):
             

@@ -72,6 +72,8 @@ class OrderBookDataset(Dataset):
 
     def __getitem__(self, idx):
         date_time = self.datetimes[idx]
+        date_time = datetime.datetime(date_time.year, date_time.month,
+                                      date_time.day, date_time.hour)
         order_book = LoadedOrderBook(date_time, self.data_folder)
         
         if self.coerce_size_:

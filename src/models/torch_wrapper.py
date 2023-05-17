@@ -266,24 +266,27 @@ class TorchWrapper(ModelWrapper):
         """
         Map the variable name to a more compact sting
         """
+        vm = ""
         if v in ("Past Prices", "Foreign Past Prices"):
-            return "price"
+            vm = "price"
         if v in ("Consumption Forecasts", "Foreign Consumption Forecasts"):
-            return "consumption"
+            vm = "cons"
         if v in ("Generation Forecasts", "Foreign Generation Forecasts"):
-            return "gen"
+            vm = "gen"
         if v in ("Renewables Generation Forecasts",
                  "Foreign Renewables Generation Forecasts"):
-            return "ren gen"
+            vm = "ren gen"
         if v in ("Swiss Prices"):
-            return "CH price"
+            vm = "CH price"
         if v in ("UK Prices"):
-            return "UK price"
+            vm = "UK price"
         if v in ("Date"):
-            return "date"
+            vm = "date"
         if v in ("Gas Price"):
-            return "gas"
-        return ""
+            vm = "gas"
+        if "Foreign" in v:
+            vm = "F. " + vm
+        return vm
 
     @property
     def country_list(self):
@@ -325,10 +328,21 @@ class TorchWrapper(ModelWrapper):
         Given a variable name, return all indices of this varialbe in X
         """
         model_columns = np.array(self.columns)
-        variable_columns = np.array(self.get_variable_columns(variable))
-        indices = np.array(
-            [np.where(model_columns == col)[0][0] for col in variable_columns])
-        return indices
+        if variable != "Residual Load":
+            variable_columns = np.array(self.get_variable_columns(variable))
+            indices = np.array(
+                [np.where(model_columns == col)[0][0] for col in variable_columns])
+            return indices
+        else:
+            conso_columns = np.array(
+                self.get_variable_columns("Consumption Forecasts"))
+            ren_columns = np.array(
+                self.get_variable_columns("Renewables Generation Forecasts"))
+            conso_indices = np.array(
+                [np.where(model_columns == col)[0][0] for col in conso_columns])
+            prod_indices = np.array(
+                [np.where(model_columns == col)[0][0] for col in ren_columns])
+            return conso_indices, prod_indices
         
     def get_variable_columns(self, variable):
         """
@@ -352,7 +366,7 @@ class TorchWrapper(ModelWrapper):
             columns = []
             for country in self.foreign_country_list(variable=variable):
                 columns += self.get_variable_columns_(vname, country, past=past_)
-
+                
         # Only 1 country which is hard_coded
         if variable in ["Swiss Prices", "UK Prices"]:
             if variable in ["Swiss Prices"]:

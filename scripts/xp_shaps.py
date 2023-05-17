@@ -33,7 +33,7 @@ PARAMS = XP_PARAMS
 #datasets = ["Lyon", "Munich", "Bruges", "Lahaye"]
 countries = ["BE"]
 datasets = ["Bruges"]
-IDs = [8]
+IDs = [4, 6, 8]
 OB_sizes = [20]
 seeds = [0]
 

@@ -206,7 +206,7 @@ class SolvingNetwork(LightningModule):
                 niter=self.niter, pmin=self.pmin_scaled, pmax=self.pmax_scaled,
                 k=self.k, mV=self.mV, check_data=self.check_data)
         
-    def forward(self, x, predict_order_books=False):
+    def forward(self, x, return_order_books=False):
         ############## -1]  Init stuff
         with record_function("INIT"):
             bs = x.shape[0]        
@@ -296,6 +296,9 @@ class SolvingNetwork(LightningModule):
                     V.reshape(-1, self.OBs, 1),
                     Po.reshape(-1, self.OBs, 1),
                     P.reshape(-1, self.OBs, 1)], axis=2)
+
+                if return_order_books:
+                    return ygamma
 
                 if self.OB_is_logging:
                     self.OB["hat"] = ygamma.detach()[self.idx_to_log, :, :]
@@ -487,19 +490,19 @@ class SolvingNetwork(LightningModule):
         yhat = self.format_prediction(yalpha, ybeta, ygamma, bs)
         return yhat
 
-
     def predict_step_OB(self, batch, batch_idx):
         """
         Outputs the predicted order books for this step.
         OBhat are ygamma if gamma > 0 or beta > 0.
         This raises an error if gamma <= 0 AND beta <= 0
 
-        To compute ygamma, this calls the forward function without solving!
+        To compute ygamma, this calls the forward function
         """
         if (self.gamma <= 0) and (self.beta <= 0):
             raise Exception("No OB forecasts available for the input parameters!")
         
-        ygamma = self.forward(batch, predict_order_books=True).detach().numpy()
+        ygamma = self.forward(batch, return_order_books=True).detach().numpy()
+        bs = batch.shape[0]
         return ygamma.reshape(bs,24*self.OBs, 3).reshape(bs, 72*self.OBs, order='F')
         
     def on_predict_end(self):

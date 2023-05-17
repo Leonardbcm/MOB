@@ -160,8 +160,10 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
     ###### METHODS FOR SKLEARN
     def fit(self, X, Y, verbose=0):
         self.xshape = X.shape
+        self.yshape = Y.shape
         train_loader, val_loader = self.create_trainer(X, Y, verbose=0)
-        self.tlshape = next(iter(train_loader))[0].shape
+        self.tlxshape = next(iter(train_loader))[0].shape
+        self.tlyshape = next(iter(train_loader))[1].shape        
         
         # Train   
         self.trainer.fit(self.model, train_dataloaders=train_loader,
@@ -185,19 +187,66 @@ class OrderBookNetwork(BaseEstimator, RegressorMixin):
         ypred = self.transformer.inverse_transform(ypred)
         return ypred
     
-    def predict_ob(self, X):
+    def predict_ob(self, X, regr):
         test_loader = self.prepare_for_test(X)
         predictions = [self.trainer.model.predict_step_OB(batch, batch_idx)
-                       for (batch, batch_idx) in enumerate(iter(test_loader))]
-
+                       for (batch_idx, batch) in enumerate(iter(test_loader))]
+        
         ypred = np.zeros((X.shape[0], 24, self.OBs, 3))
-        idx = 0
+        v_indices = np.arange(self.OBs*24)
+        po_indices = np.arange(self.OBs*24, self.OBs*48)
+        p_indices = np.arange(self.OBs*48, self.OBs*72)        
+        idx = 0        
         for i, data in enumerate(predictions):
-            bs = int(data.shape[0]/24)
-            ypred[idx:idx+bs] = data.reshape(bs, 24, self.OBs, 3)
-            idx += bs
+            bs = int(data.shape[0])            
+            v = data[:, v_indices].reshape(bs, 24, self.OBs, 1)
+            po = data[:, po_indices].reshape(bs, 24, self.OBs, 1)
+            p = data[:, p_indices].reshape(bs, 24, self.OBs, 1)
+            
+            OB_reshaped = np.zeros((bs, self.OBs*72))
+
+            for k in range(bs):
+                for h in range(24):
+                    OB_reshaped[k, h*self.OBs*3:h*self.OBs*3+self.OBs] = v[k, h, :].reshape(-1)
+                    OB_reshaped[k, (h*self.OBs*3+self.OBs):(h*self.OBs*3+2*self.OBs)] = po[k, h, :].reshape(-1)
+                    OB_reshaped[k, (h*self.OBs*3+2*self.OBs):(h*self.OBs*3+3*self.OBs)] = p[k, h, :].reshape(-1)                    
+
+            OB_reshaped = regr.steps[0][1].OB_scaler.inverse_transform(OB_reshaped)
+
+            OB_res = np.zeros((bs, 24, self.OBs, 3))
+            for k in range(bs):
+                for h in range(24):
+                    OB_res[k, h, :, 0] = OB_reshaped[k,h*self.OBs*3:h*self.OBs*3+self.OBs]
+                    OB_res[k, h, :, 1] = OB_reshaped[k,(h*self.OBs*3+self.OBs):(h*self.OBs*3+2*self.OBs)]
+                    OB_res[k, h, :, 2] = OB_reshaped[k,(h*self.OBs*3+2*self.OBs):(h*self.OBs*3+3*self.OBs)]                                
+
+            ypred[idx:idx+bs] = OB_res            
+            idx += bs            
             
         return ypred
+
+    def predict_ob_scaled(self, X, regr):
+        test_loader = self.prepare_for_test(X)
+        predictions = [self.trainer.model.predict_step_OB(batch, batch_idx)
+                       for (batch_idx, batch) in enumerate(iter(test_loader))]
+        
+        ypred = np.zeros((X.shape[0], 24, self.OBs, 3))
+        v_indices = np.arange(self.OBs*24)
+        po_indices = np.arange(self.OBs*24, self.OBs*48)
+        p_indices = np.arange(self.OBs*48, self.OBs*72)        
+        idx = 0        
+        for i, data in enumerate(predictions):
+            bs = int(data.shape[0])            
+            v = data[:, v_indices].reshape(bs, 24, self.OBs, 1)
+            po = data[:, po_indices].reshape(bs, 24, self.OBs, 1)
+            p = data[:, p_indices].reshape(bs, 24, self.OBs, 1)
+            
+            ypred[idx:idx+bs] = np.concatenate((
+                v, po, p), axis=-1)
+            idx += bs            
+            
+        return ypred
+    
 
     def score(self, X, y):
         yhat = self.predict(X)
