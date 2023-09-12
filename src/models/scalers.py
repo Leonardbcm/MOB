@@ -676,12 +676,17 @@ class SignOBNScaler(TransformerMixin, BaseEstimator):
     def fit(self, X, y=None):
         self.n_features_in_ = X.shape[1]
 
+        # Split horizontally
         if self.spliter is not None:
             (X, _) = self.spliter(X)
-            
+ 
+        # Split vertically           
         x, OB = self.split_OB(X)
-        
-        self.scaler.fit(x)    
+
+        # fit the data part
+        self.scaler.fit(x)
+
+        # Scale the OB part
         if OB.shape[1] > 0:
             self.OB_scaler.fit(OB)
         
@@ -694,13 +699,20 @@ class SignOBNScaler(TransformerMixin, BaseEstimator):
             raise ValueError('Shape of input is different from what was seen'
                              'in `fit`')
 
+        # Split horizontally
         X, OB = self.split_OB(X)
+
+        # Transform the data part
         X = self.scaler.transform(X)
         
-        # Transform only if OB is not null
-        if OB.shape[1] > 0:        
+        # Transform the OB part
+        if OB.shape[1] > 0:
             OB = self.OB_scaler.transform(OB)
-            X = self.reconstruct_OB(X, OB)            
+
+            # Reconstruct the data
+            X = self.reconstruct_OB(X, OB)
+
+            # Apply the signs to ensure that scaled orders are still supply/demand. 
             X[:, self.v_indices] = self.mask * np.abs(X[:, self.v_indices])
             X[:, self.p_indices] = self.mask * np.abs(X[:, self.p_indices])
                         
@@ -708,7 +720,7 @@ class SignOBNScaler(TransformerMixin, BaseEstimator):
 
     def inverse_transform(self, X):
         check_is_fitted(self, 'n_features_in_')
-        pad = X.shape[1] == self.n_features_in_ - self.N_DATA            
+        pad = X.shape[1] == self.n_features_in_ - self.N_DATA
         if X.shape[1] != self.n_features_in_:
             if pad:
                 # In this case, the scaler has seen 72 * OBs + 24 features but

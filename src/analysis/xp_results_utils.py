@@ -295,7 +295,7 @@ def compute_DM_tests_2_OBs(countries,datasets,IDs, OBs1, OBs2, predicted_prices,
     return price_tables            
 
 def plot_DM_tests(pvalues, params, countries=[], IDs=[], label=""):    
-    fig, axes = plt.subplots(2, 2, figsize=(1.68 * 19.2/4, 10.8),
+    fig, axes = plt.subplots(2, 2, figsize=(1.9 * 19.2/4, 10.8),
                              sharex="col", sharey="row",
                              gridspec_kw={"hspace" : 0.15, "wspace" : 0.0})
     axes = axes.flatten()
@@ -314,6 +314,12 @@ def plot_DM_tests(pvalues, params, countries=[], IDs=[], label=""):
         #### Remove nan columns
         mask = np.array([not np.isnan(ps[i]).all() for i in range(ps.shape[0])])
         ps = ps[mask, :][:, mask]
+
+        tick_labels = ["$\mbox{DNN}_{Y}$", "$\mbox{DNN}_{OB}$", "$\mbox{DO}$",
+                       "$\mbox{DO} + \mbox{DNN}_{OB}$",
+                       "$\mbox{DO} + \mbox{DNN}_{Y}$",
+                       "$\mbox{DO} + \mbox{DNN}_{Y, OB}$"]
+        yy = -0.5
         
         #### Display the pvalues
         if has_data:
@@ -324,26 +330,31 @@ def plot_DM_tests(pvalues, params, countries=[], IDs=[], label=""):
 
             # X ticks
             ax.set_xticks(range(len(IDs[mask])))
-            #set_xticklabels(IDs[mask], fontsize=params["fontsize_labels"])
-            ax.set_xticklabels(range(1, 1 + len(IDs[mask])),
-                            fontsize=params["fontsize_labels"])
+            ax.set_xticklabels([])
             
             # Y ticks
             ax.set_yticks(range(len(IDs[mask])))
-            ax.set_yticklabels(range(1, 1+len(IDs[mask])),
-                               fontsize=params["fontsize_labels"])
+            ax.set_yticklabels(tick_labels, fontsize=params["fontsize_labels"])
             
             # Crosses on the diagonal
             ax.plot(range(len(IDs[mask])), range(len(IDs[mask])), 'wx')
 
-    axes[0].set_ylabel("Model ID", fontsize=params["fontsize_labels"])
-    axes[2].set_ylabel("Model ID", fontsize=params["fontsize_labels"])    
-    axes[2].set_xlabel("Model ID", fontsize=params["fontsize_labels"])
-    axes[3].set_xlabel("Model ID", fontsize=params["fontsize_labels"])    
+    xx = 0.2
+    for i in range(len(IDs[mask])):
+        axes[2].text(i+xx, yy, tick_labels[i], rotation = 45, va="top",
+                ha="right", fontsize = params["fontsize_labels"])
+        axes[3].text(i+xx, yy, tick_labels[i], rotation = 45, va="top",
+                ha="right", fontsize = params["fontsize_labels"])
+        
+
+    #axes[0].set_ylabel("Model ID", fontsize=params["fontsize_labels"])
+    #axes[2].set_ylabel("Model ID", fontsize=params["fontsize_labels"])    
+    #axes[2].set_xlabel("Model ID", fontsize=params["fontsize_labels"])
+    #axes[3].set_xlabel("Model ID", fontsize=params["fontsize_labels"])    
     
     # Display the colorbar
     cbar = plt.colorbar(im, ax=axes, orientation="horizontal", fraction=0.05,
-                        pad=0.11)
+                        pad=0.151)
     cbar.ax.set_xlabel("pvalue", fontsize=params["fontsize_labels"]) 
     cbar.ax.tick_params(labelsize=params["fontsize_labels"])   
     plt.suptitle(f"DM tests on the price forecasting task",
@@ -535,7 +546,7 @@ def plot_predictions(predictions, real_prices, IDs, OBs, N_VAL, country, dataset
     Plot forecasts and real labels for several values of beta
     """
     fig, axes = plt.subplots(2, figsize=(19.2/2, 10.8), sharex=True,
-                             gridspec_kw={"hspace": 0.1})
+                             gridspec_kw={"hspace": 0.0})
     ax = axes[0]
     
     #### Retrieve betas
@@ -584,7 +595,8 @@ def plot_predictions(predictions, real_prices, IDs, OBs, N_VAL, country, dataset
     ax.set_xlim([xindices[start], xindices[stop]])
 
     ## y axis
-    ax.set_ylabel("Forecasted Price (\euro{}/MWh)",fontsize=params["fontsize"])
+    ax.set_ylabel("Forecasted Price (\euro{}/MWh)",fontsize=params["fontsize"],
+                  labelpad=0.4)
     ax.set_ylim([0, 66])    
 
     ## Ticks
@@ -594,8 +606,8 @@ def plot_predictions(predictions, real_prices, IDs, OBs, N_VAL, country, dataset
     ax.grid("on", axis="both", which="major")
     
     ## Legend
-    ax.legend(fontsize=params["fontsize_labels"]*0.9, loc='upper right',
-              bbox_to_anchor=(0.8, 1))
+    ax.legend(fontsize=params["fontsize_labels"]*0.9, loc='upper left',
+              bbox_to_anchor=(0.01, 1), framealpha=1)
 
     ## Title
     ax.set_title("Price forecasts and real price", fontsize=params["fontsize"])    
@@ -617,12 +629,13 @@ def plot_predictions(predictions, real_prices, IDs, OBs, N_VAL, country, dataset
 
     ## General settings
     axv.set_ylim([-40, 22])
-    axv.legend(fontsize=params["fontsize_labels"])
+    axv.legend(fontsize=params["fontsize_labels"], loc='upper left',
+               bbox_to_anchor=(0.01, 1), framealpha=1)
     axv.grid("on", axis="both", which="major")
-    axv.set_title("Fundamental Variables", fontsize=params["fontsize"])
+    axv.set_title("Fundamental Variables", fontsize=params["fontsize"], y=0.01)
 
     ## Y axis
-    axv.set_ylabel("Deviation (\%)", fontsize=params["fontsize"])
+    axv.set_ylabel("Deviation (\%)", fontsize=params["fontsize"], labelpad=0.2)
 
     ## X axis
     axv.tick_params(which="both", axis="both", labelsize=params["fontsize_labels"])
@@ -633,6 +646,21 @@ def plot_predictions(predictions, real_prices, IDs, OBs, N_VAL, country, dataset
     
     # Set formatter
     ax.xaxis.set_major_formatter(MyFormatter())
+
+    # Set y locators
+    ax.set_yticks(range(0, 70, 20))
+    axv.set_yticks(range(-40, 30, 20))    
+    
+
+    # Plot vertical lines
+    dates_to_plot = [
+        datetime.datetime(2019, 10, 12, 2),
+        datetime.datetime(2019, 10, 11, 23),
+        datetime.datetime(2019, 10, 11, 1),
+    datetime.datetime(2019, 10, 11, 4)]
+    for date in dates_to_plot:
+        for a in [ax, axv]:
+            a.axvline(date, color="k", linestyle="--", linewidth=2)
     
 def predict_order_book(IDs, OBs, N_VAL, country, dataset, dt, folder, params):
     """

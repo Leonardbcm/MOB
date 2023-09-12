@@ -11,10 +11,10 @@ from src.analysis.utils import load_real_prices
 from src.analysis.order_book_analysis_utils import *
 
 base_folder = os.environ["MOB"]
-data_folder = os.path.join(base_folder, "HOURLY")
+data_folder = os.path.join(base_folder, "curves")
 
 ##################### Compute price distribution
-df = load_real_prices()
+df = load_real_prices("FR")
 datetimes = df.index
 date_time = datetimes[0]
 

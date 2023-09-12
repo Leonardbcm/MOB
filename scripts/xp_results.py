@@ -9,6 +9,9 @@ import src.models.parallel_scikit as ps
 from src.analysis.utils import *
 from src.analysis.xp_results_utils import *
 
+%autoreload 1
+%aimport src.analysis.xp_results_utils
+
 """
 XP results and analysis file
 """
@@ -156,7 +159,7 @@ with matplotlib.rc_context({ "text.usetex" : True,
                              "text.latex.preamble" : r"\usepackage[bitstream-charter]{mathdesign} \usepackage[T1]{fontenc} \usepackage{mathtools}",
                              "font.family" : ""}):
     plt.close("all")
-    params = {"fontsize_labels" : 15, "fontsize" : 20}
+    params = {"fontsize_labels" : 20, "fontsize" : 25}
     plot_predictions(
         predicted_prices['20'][0], real_prices['20'][0], PARAMS["IDs"], 20,
         PARAMS["N_VAL"],"BE","Bruges", PARAMS["tboard"], params,

@@ -21,7 +21,7 @@ model_wrapper = OBNWrapper("TEST", "Bruges", country="BE", tboard="RESULTS",
                            spliter=spliter, skip_connection=True,
                            use_order_books=False,
                            order_book_size=20,
-                           IDn = 1)
+                           IDn = 3)
                            #alpha=0, beta=0, gamma=1)
 X, Y = model_wrapper.load_train_dataset()
 print(X.shape)
