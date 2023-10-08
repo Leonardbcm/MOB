@@ -541,7 +541,7 @@ def retrieve_betas(IDs, OBs, country, dataset, folder, N_VAL):
     return betas
         
 def plot_predictions(predictions, real_prices, IDs, OBs, N_VAL, country, dataset,
-                     folder, params, betas_to_plot=[0, 0.5, 1]):
+                     folder, params, betas_to_plot=[0, 0.5, 1], labels=[]):
     """
     Plot forecasts and real labels for several values of beta
     """
@@ -581,23 +581,38 @@ def plot_predictions(predictions, real_prices, IDs, OBs, N_VAL, country, dataset
             color = "r"
         if beta == 1:
             color = "g"
+        if labels != []:
+            if beta == 0.5:
+                color = "darkgreen"
+            if beta == 1:
+                color = "mediumseagreen"                
         #pred_index = np.where(np.array(IDs) == IDs[i])[0][0]
-        pred_index = i        
+        pred_index = i
+        if labels == []:
+            label_ = label
+        else:
+            label_ = labels[j]
         ax.plot(
             xindices,predictions[pred_index].reshape(-1),
-            label=label,c=color, linewidth=2.5)
-    ax.plot(xindices, y, label="Real Prices", linewidth=4, color="k")
+            label=label_,c=color, linewidth=4)
+    ax.plot(xindices, y, label="Real Prices", linewidth=6, color="k")
 
     #### Arrange plot
     ## x axis
     start = len(xindices) - 31 * 24 - 30 * 24 - 21 * 24 - 24
     stop = start + 72
+    if labels != []:
+        start += 24
+        stop -= 16
     ax.set_xlim([xindices[start], xindices[stop]])
 
     ## y axis
-    ax.set_ylabel("Forecasted Price (\euro{}/MWh)",fontsize=params["fontsize"],
+    ax.set_ylabel("Forecasted Price (\euro{}/MWh)",fontsize=params["fontsize_labels"],
                   labelpad=0.4)
-    ax.set_ylim([0, 66])    
+    ylim = 66
+    if labels != []:
+        ylim = 50
+    ax.set_ylim([0, ylim])    
 
     ## Ticks
     ax.tick_params(which="both", axis="both", labelsize=params["fontsize_labels"])
@@ -606,8 +621,13 @@ def plot_predictions(predictions, real_prices, IDs, OBs, N_VAL, country, dataset
     ax.grid("on", axis="both", which="major")
     
     ## Legend
-    ax.legend(fontsize=params["fontsize_labels"]*0.9, loc='upper left',
-              bbox_to_anchor=(0.01, 1), framealpha=1)
+    
+    if labels != []:
+        ax.legend(fontsize=params["fontsize_labels"]*0.9, loc='upper left',
+                  bbox_to_anchor=(.81, 1), framealpha=1)
+    else:
+        ax.legend(fontsize=params["fontsize_labels"]*0.9, loc='upper left',
+                  bbox_to_anchor=(0.01, 1), framealpha=1)
 
     ## Title
     ax.set_title("Price forecasts and real price", fontsize=params["fontsize"])    
@@ -620,22 +640,33 @@ def plot_predictions(predictions, real_prices, IDs, OBs, N_VAL, country, dataset
     conso_inds, ren_inds = model_wrapper.get_variable_indices("Residual Load")    
         
     gen = 100 * (Xv[:, gen_inds] - Xv[:, gen_inds].mean(axis=0)) / Xv[:, gen_inds]
-    axv.plot(xindices, gen.reshape(-1), label="Generation Forecasts", linewidth=2.5)
+    axv.plot(xindices, gen.reshape(-1),
+             label="\\begin{align*} & \mbox{Generation} \\\ & \\mbox{Forecasts} \\end{align*}",
+             linewidth=4)
 
     ## residual Load
     rload = Xv[:, conso_inds] - Xv[:, ren_inds]
     rload = 100 * (rload - rload.mean(axis=0)) / rload
-    axv.plot(xindices, rload.reshape(-1), label="Residual Load", linewidth=2.5)    
+    axv.plot(xindices, rload.reshape(-1),
+             label="\\begin{align*} & \mbox{Residual} \\\ & \\mbox{Load} \\end{align*}",
+             linewidth=4)    
 
     ## General settings
     axv.set_ylim([-40, 22])
-    axv.legend(fontsize=params["fontsize_labels"], loc='upper left',
-               bbox_to_anchor=(0.01, 1), framealpha=1)
+    if labels != []:
+        axv.legend(fontsize=params["fontsize_labels"], loc='upper left',
+                   bbox_to_anchor=(0.81, 1), framealpha=1)        
+    else:
+        axv.legend(fontsize=params["fontsize_labels"], loc='upper left',
+                   bbox_to_anchor=(0.01, 1), framealpha=1)
+        
     axv.grid("on", axis="both", which="major")
-    axv.set_title("Fundamental Variables", fontsize=params["fontsize"], y=0.01)
+
+    if labels == []:
+        axv.set_title("Fundamental Variables", fontsize=params["fontsize"], y=0.01)
 
     ## Y axis
-    axv.set_ylabel("Deviation (\%)", fontsize=params["fontsize"], labelpad=0.2)
+    axv.set_ylabel("Deviation (\%)", fontsize=params["fontsize_labels"], labelpad=0.2)
 
     ## X axis
     axv.tick_params(which="both", axis="both", labelsize=params["fontsize_labels"])
@@ -660,7 +691,7 @@ def plot_predictions(predictions, real_prices, IDs, OBs, N_VAL, country, dataset
     datetime.datetime(2019, 10, 11, 4)]
     for date in dates_to_plot:
         for a in [ax, axv]:
-            a.axvline(date, color="k", linestyle="--", linewidth=2)
+            a.axvline(date, color="k", linestyle="--", linewidth=4)
     
 def predict_order_book(IDs, OBs, N_VAL, country, dataset, dt, folder, params):
     """

@@ -166,6 +166,17 @@ with matplotlib.rc_context({ "text.usetex" : True,
         betas_to_plot=[0,  0.5,  1])
     plt.show()
 
+with matplotlib.rc_context({ "text.usetex" : True,
+                             "text.latex.preamble" : r"\usepackage[bitstream-charter]{mathdesign} \usepackage[T1]{fontenc} \usepackage{mathtools}",
+                             "font.family" : ""}):
+    plt.close("all")
+    params = {"fontsize_labels" : 20, "fontsize" : 35}
+    plot_predictions(
+        predicted_prices['20'][0], real_prices['20'][0], PARAMS["IDs"], 20,
+        PARAMS["N_VAL"],"BE","Bruges", PARAMS["tboard"], params,
+        betas_to_plot=[0,  0.5,  1], labels=["$DNN$", "$DO$", "$DNN + DO$"])
+    plt.show()    
+
 PARAMS = OB_PARAMS
 dt = datetime.datetime(2019, 10, 12, 1)
 OBs = predict_order_book(PARAMS["IDs"], 20, PARAMS["N_VAL"], "BE", "Bruges",
